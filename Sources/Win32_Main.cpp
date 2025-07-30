@@ -213,6 +213,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	}
 
 	// Create the Client Context, start the client and begin processing frames as fast as possible.
+	ClientContext ClientRunningContext = {};
+	ClientRunningContext.PersistentMemory.Allocate = malloc;
+	ClientRunningContext.PersistentMemory.Free = free;
+
+	ClientAPI.StartClient(ClientRunningContext);
+
+	// Frame tracking
+	size_t frameCounter = 0;
 
 	// Message processing & Drawing loop.
 	MSG message;
@@ -224,21 +232,47 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			DispatchMessage(&message);
 		}
 		
-		// Clear screen to blue.
-		for (int x = 0; x < Win32App.PixelBufferWidth; x++)
+		// TODO Process Inputs and other events triggered by the message loop.
+
+		// Prepare frame data for next client frame.
+		ClientFrameData frameData = {};
+		frameData.FrameMemory = ClientRunningContext.PersistentMemory;
+		frameData.FrameNumber = frameCounter++;
+		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
+		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
+		// in this software.
+
+		// Run Client Frame
+		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
+		ClientAPI.RunClientFrame(ClientRunningContext, frameData);
+
+		// Drawing pass - rasterize all incoming draw calls after clearing the screen to a bright color 
+		// to underline unused screen real-estate.
 		{
-			for (int y = 0; y < Win32App.PixelBufferHeight; y++)
+			// Clear screen to blue.
+			for (int x = 0; x < Win32App.PixelBufferWidth; x++)
 			{
-				Win32App.PixelBuffer[x * Win32App.PixelBufferHeight + y].full = 0xff0000ff;
+				for (int y = 0; y < Win32App.PixelBufferHeight; y++)
+				{
+					Win32App.PixelBuffer[x * Win32App.PixelBufferHeight + y].full = 0xff0000ff;
+				}
 			}
 		}
-		
+
+		// Blit updated pixels onto the Main Window.
 		BitBlt(Win32App.MainWindowDC, 0, 0, Win32App.PixelBufferWidth, Win32App.PixelBufferHeight, Win32App.MainWindowBitmapDC, 0, 0, SRCCOPY);
+		
+		// TODO Handle incoming WAV audio samples. Think about that system - in the same spirit as draw calls, should audio use an abstracted
+		// idea of "sound bytes" instead, wherein the platform & render layer could process those as it pleases, perhaps using its own sounds ?
+	}
+
+	if (ClientAPI.APISuccessfullyLoaded())
+	{
+		ClientAPI.ShutdownClient(ClientRunningContext);
+		UnloadClientModule(Win32App.ClientModule);
 	}
 
 	CleanupMainWindow();
-
-	UnloadClientModule(Win32App.ClientModule);
 
 	if (Win32App.bUsingConsole)
 	{
