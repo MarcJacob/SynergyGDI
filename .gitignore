@@ -1,0 +1,13 @@
+# Visual Studio stuff
+
+*.sln
+*.vcxproj
+*.vcxproj.user
+*.vcxproj.filters
+.vs/
+
+# Build products
+
+Build/
+Intermediate/
+
