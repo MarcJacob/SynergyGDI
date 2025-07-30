@@ -1,4 +1,8 @@
-#include <Win32_ClientLibLoader.h>
+// Synergy Client Module & API Loading implementation. The symbols are referenced and used in Win32_Main.cpp.
+
+#include "Win32_Platform.h"
+
+#include <SynergyClient.h>
 
 #include <iostream>
 #include <shellapi.h>
@@ -61,4 +65,5 @@ HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 void UnloadClientModule(HMODULE ClientModule)
 {
 	FreeLibrary(ClientModule);
+	ClientModule = 0;
 }

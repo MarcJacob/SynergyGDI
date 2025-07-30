@@ -1,18 +1,11 @@
 // Synergy Client Module & API Loading implementation. The symbols are referenced and used in Win32_Main.cpp.
 
+#include "Win32_Platform.h"
+
 #include <SynergyClient.h>
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 
 #include <iostream>
 #include <shellapi.h>
-
-// IMPLEMENTED SYMBOLS
-
-HMODULE LoadClientModule(SynergyClientAPI& APIStruct);
-void UnloadClientModule(HMODULE ClientModule);
-
-// ----------------
 
 #define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
 #define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
