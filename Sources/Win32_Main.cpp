@@ -2,7 +2,7 @@
 #include <Windows.h>
 
 #include "SynergyClient.h"
-#include "SynergyClientLibLoader.h"
+#include "Win32_ClientLibLoader.h"
 
 #include <iostream>
 
