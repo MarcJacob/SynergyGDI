@@ -21,7 +21,13 @@ struct Win32AppContext
 	HMODULE ClientModule;
 };
 
+struct SynergyClientAPI
+{
+	decltype(Hello)* Hello = nullptr;
+};
+
 static Win32AppContext Win32App;
+static SynergyClientAPI ClientAPI;
 
 void LoadClientModule()
 {
@@ -31,11 +37,17 @@ void LoadClientModule()
 		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << CLIENT_MODULE_FILENAME << "\" exists.\n";
 		return;
 	}
+
+	// Load Client API functions.
+	ClientAPI = {};
+	ClientAPI.Hello = reinterpret_cast<decltype(ClientAPI.Hello)>(GetProcAddress(Win32App.ClientModule, "Hello"));
 }
 
 void UnloadClientModule()
 {
 	FreeLibrary(Win32App.ClientModule);
+
+	ClientAPI = {};
 }
 
 LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LPARAM lParam)
@@ -115,6 +127,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	if (Win32App.MainWindow != nullptr && Win32App.ClientModule != nullptr)
 	{
 		Win32App.bRunning = true;
+
+		ClientAPI.Hello();
 	}
 
 	MSG message;
