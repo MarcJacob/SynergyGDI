@@ -42,8 +42,8 @@ struct Win32AppContext
 
 	// Render Pixel data
 	PixelRGBA* PixelBuffer;
-	size_t PixelBufferWidth;
-	size_t PixelBufferHeight;
+	uint16_t PixelBufferWidth;
+	uint16_t PixelBufferHeight;
 
 	// Memory arena for dynamic memory allocations in the Client app.
 	uint8_t* ClientAppMemory;
@@ -197,40 +197,129 @@ bool AppContextInitSuccessful()
 	return Win32App.MainWindow != nullptr && ClientAPI.APISuccessfullyLoaded();
 }
 
+void DrawLine(LineDrawCallData& DrawCall)
+{
+	float vecX, vecY;
+	vecX = static_cast<float>(DrawCall.destX - DrawCall.x);
+	vecY = static_cast<float>(DrawCall.destY - DrawCall.y);
+
+	// Track iteration count separately as it needs to stay a positive, relative number in all cases.
+	int it = -1;
+
+	if (abs(vecX) > abs(vecY))
+	{
+		float yIncrement = vecY / abs(vecX);
+		for (int x = DrawCall.x;; vecX > 0 ? x++ : x--)
+		{
+			it++;
+			if (x < 0)
+			{
+				if (vecX > 0)
+					continue;
+				else
+					break;
+			}
+			else if (x >= Win32App.PixelBufferWidth)
+			{
+				if (vecX < 0)
+					continue;
+				else
+					break;
+			}
+
+			// Compute final coordinates of pixel to be colored.
+			uint16_t finalY = static_cast<uint16_t>(DrawCall.y + yIncrement * it);
+			if (finalY < 0 || finalY >= Win32App.PixelBufferHeight)
+			{
+				continue;
+			}
+
+			Win32App.PixelBuffer[finalY * Win32App.PixelBufferWidth + x].full = DrawCall.color.full;
+
+			if (x == DrawCall.destX)
+			{
+				break;
+			}
+		}
+	}
+	else
+	{
+		float xIncrement = vecX / abs(vecY);
+		for (int y = DrawCall.y;; vecY > 0 ? y++ : y--)
+		{
+			it++;
+			if (y < 0)
+			{
+				if (vecY > 0)
+					continue;
+				else
+					break;
+			}
+			else if (y >= Win32App.PixelBufferHeight)
+			{
+				if (vecY < 0)
+					continue;
+				else
+					break;
+			}
+
+			// Compute final coordinates of pixel to be colored.
+			uint16_t finalX = static_cast<uint16_t>(DrawCall.x + xIncrement * it);
+			if (finalX < 0 || finalX >= Win32App.PixelBufferHeight)
+			{
+				continue;
+			}
+			Win32App.PixelBuffer[y * Win32App.PixelBufferWidth + finalX].full = DrawCall.color.full;
+
+			if (y == DrawCall.destY)
+			{
+				break;
+			}
+		}
+	}
+}
+
+void DrawRectangle(RectangleDrawCallData& DrawCall)
+{
+	// TODO: Use simd ? 
+	for (int y = DrawCall.y; y < DrawCall.height + DrawCall.y; y++)
+	{
+		if (y < 0)
+		{
+			continue;
+		}
+		else if (y >= Win32App.PixelBufferHeight)
+		{
+			break;
+		}
+		for (int x = DrawCall.x; x < DrawCall.width + DrawCall.x; x++)
+		{
+			if (x < 0)
+			{
+				continue;
+			}
+			else if (x >= Win32App.PixelBufferWidth)
+			{
+				break;
+			}
+
+			Win32App.PixelBuffer[y * Win32App.PixelBufferWidth + x].full = DrawCall.color.full;
+		}
+	}
+}
+
 void ProcessDrawCall(DrawCall& Call)
 {
+	LineDrawCallData& line = static_cast<LineDrawCallData&>(Call);
 	RectangleDrawCallData& rect = static_cast<RectangleDrawCallData&>(Call);
 	EllipseDrawCallData& ellipse = static_cast<EllipseDrawCallData&>(Call);
 	switch (Call.type)
 	{
+	case(DrawCallType::LINE):
+		DrawLine(line);
+		break;
 	case(DrawCallType::RECTANGLE):
-
-		// TODO: Use simd ? 
-		for (int y = rect.y; y < rect.height + rect.y; y++)
-		{
-			if (y < 0)
-			{
-				continue;
-			}
-			else if (y >= Win32App.PixelBufferHeight)
-			{
-				break;
-			}
-			for (int x = rect.x; x < rect.width + rect.x; x++)
-			{
-				if (x < 0)
-				{
-					continue;
-				}
-				else if (x >= Win32App.PixelBufferWidth)
-				{
-					break;
-				}
-
-				Win32App.PixelBuffer[y * Win32App.PixelBufferWidth + x].full = rect.color.full;
-			}
-		}
-		
+		DrawRectangle(rect);
 		break;
 	case(DrawCallType::ELLIPSE):
 		break;
@@ -296,15 +385,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
 		ClientAPI.RunClientFrame(ClientRunningContext, frameData);
 
-		// Drawing pass - rasterize all incoming draw calls after clearing the screen to a bright color 
-		// to underline unused screen real-estate.
+		// Drawing pass - rasterize all incoming draw calls after clearing the screen to black.
 		{
 			// Clear screen to blue.
 			for (int x = 0; x < Win32App.PixelBufferWidth; x++)
 			{
 				for (int y = 0; y < Win32App.PixelBufferHeight; y++)
 				{
-					Win32App.PixelBuffer[x * Win32App.PixelBufferHeight + y].full = 0xff0000ff;
+					Win32App.PixelBuffer[x * Win32App.PixelBufferHeight + y].full = 0xff000000;
 				}
 			}
 		}
