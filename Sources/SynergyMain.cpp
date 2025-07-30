@@ -47,15 +47,6 @@ struct Win32AppContext
 	size_t ClientAppMemorySize;
 };
 
-struct SynergyClientAPI
-{
-	bool bLoaded = false;
-
-	decltype(Hello)* Hello = nullptr;
-
-	void* (*CreateClientContext)() = nullptr;
-};
-
 static Win32AppContext Win32App;
 static SynergyClientAPI ClientAPI;
 
@@ -81,17 +72,32 @@ void LoadClientModule()
 	if (ClientAPI.Hello == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
-		return;
 	}
 	
-	ClientAPI.CreateClientContext = reinterpret_cast<decltype(ClientAPI.CreateClientContext)>(GetProcAddress(Win32App.ClientModule, "CreateClientContext"));
-	if (0 && ClientAPI.CreateClientContext == nullptr)
+	ClientAPI.StartClient = reinterpret_cast<decltype(ClientAPI.StartClient)>(GetProcAddress(Win32App.ClientModule, "StartClient"));
+	if (ClientAPI.StartClient == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
-		return;
 	}
 
-	ClientAPI.bLoaded = true;
+	ClientAPI.RunClientFrame = reinterpret_cast<decltype(ClientAPI.RunClientFrame)>(GetProcAddress(Win32App.ClientModule, "RunClientFrame"));
+	if (ClientAPI.RunClientFrame == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"RunClientFrame \" in Client library.\n";
+	}
+
+	ClientAPI.ShutdownClient = reinterpret_cast<decltype(ClientAPI.ShutdownClient)>(GetProcAddress(Win32App.ClientModule, "ShutdownClient"));
+	if (ClientAPI.ShutdownClient == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"ShutdownClient \" in Client library.\n";
+	}
+
+	if (!ClientAPI.APISuccessfullyLoaded())
+	{
+		std::cerr << "FAILED TO LOAD CLIENT LIBRARY.\n";
+		ClientAPI = {};
+		return;
+	}
 }
 
 void UnloadClientModule()
@@ -227,7 +233,7 @@ void CloseConsole()
 // Runs necessary post-init checks to ensure initialization was successful and the app is in a state where it can run.
 bool AppContextInitSuccessful()
 {
-	return Win32App.MainWindow != nullptr && ClientAPI.bLoaded;
+	return Win32App.MainWindow != nullptr && ClientAPI.APISuccessfullyLoaded();
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
