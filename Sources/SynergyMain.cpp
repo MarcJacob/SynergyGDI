@@ -2,13 +2,9 @@
 #include <Windows.h>
 
 #include "SynergyClient.h"
+#include "SynergyClientLibLoader.h"
 
 #include <iostream>
-
-#include <shellapi.h>
-
-#define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
-#define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
 
 union PixelRGBA
 {
@@ -49,63 +45,6 @@ struct Win32AppContext
 
 static Win32AppContext Win32App;
 static SynergyClientAPI ClientAPI;
-
-void LoadClientModule()
-{
-	HINSTANCE ReloadProgram = ShellExecute(NULL, L"open", L"UpdateClientLib.bat", L"", L"", 0);
-	
-	// Wait for reload program to do its thing.
-	// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
-	Sleep(500);
-
-	Win32App.ClientModule = LoadLibrary(WCLIENT_MODULE_FILENAME);
-	if (Win32App.ClientModule == nullptr)
-	{
-		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << CLIENT_MODULE_FILENAME << "\" exists.\n";
-		return;
-	}
-
-	// Load Client API functions.
-	ClientAPI = {};
-	
-	ClientAPI.Hello = reinterpret_cast<decltype(ClientAPI.Hello)>(GetProcAddress(Win32App.ClientModule, "Hello"));
-	if (ClientAPI.Hello == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
-	}
-	
-	ClientAPI.StartClient = reinterpret_cast<decltype(ClientAPI.StartClient)>(GetProcAddress(Win32App.ClientModule, "StartClient"));
-	if (ClientAPI.StartClient == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
-	}
-
-	ClientAPI.RunClientFrame = reinterpret_cast<decltype(ClientAPI.RunClientFrame)>(GetProcAddress(Win32App.ClientModule, "RunClientFrame"));
-	if (ClientAPI.RunClientFrame == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"RunClientFrame \" in Client library.\n";
-	}
-
-	ClientAPI.ShutdownClient = reinterpret_cast<decltype(ClientAPI.ShutdownClient)>(GetProcAddress(Win32App.ClientModule, "ShutdownClient"));
-	if (ClientAPI.ShutdownClient == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"ShutdownClient \" in Client library.\n";
-	}
-
-	if (!ClientAPI.APISuccessfullyLoaded())
-	{
-		std::cerr << "FAILED TO LOAD CLIENT LIBRARY.\n";
-		ClientAPI = {};
-		return;
-	}
-}
-
-void UnloadClientModule()
-{
-	FreeLibrary(Win32App.ClientModule);
-
-	ClientAPI = {};
-}
 
 LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LPARAM lParam)
 {
@@ -162,8 +101,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 		break;
 	case(WM_KEYDOWN):
 		std::cout << "Reloading Client Module.\n";
-		UnloadClientModule();
-		LoadClientModule();
+		UnloadClientModule(Win32App.ClientModule);
+		Win32App.ClientModule = LoadClientModule(ClientAPI);
 		ClientAPI.Hello();
 	default:
 		break;
@@ -243,7 +182,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	LoadClientModule();
+	Win32App.ClientModule = LoadClientModule(ClientAPI);
 
 	CreateMainWindow();
 
@@ -254,6 +193,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// Output client Hello.
 		ClientAPI.Hello();
 	}
+
+	// Create the Client Context, start the client and begin processing frames as fast as possible.
 
 	// Message processing & Drawing loop.
 	MSG message;
@@ -279,7 +220,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	CleanupMainWindow();
 
-	UnloadClientModule();
+	UnloadClientModule(Win32App.ClientModule);
 
 	if (Win32App.bUsingConsole)
 	{
