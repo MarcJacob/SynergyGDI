@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include "SynergyClient.h"
+#include "SynergyClientDrawBuffer.h"
 
 #include <iostream>
 
@@ -196,6 +197,49 @@ bool AppContextInitSuccessful()
 	return Win32App.MainWindow != nullptr && ClientAPI.APISuccessfullyLoaded();
 }
 
+void ProcessDrawCall(DrawCall& Call)
+{
+	RectangleDrawCallData& rect = static_cast<RectangleDrawCallData&>(Call);
+	EllipseDrawCallData& ellipse = static_cast<EllipseDrawCallData&>(Call);
+	switch (Call.type)
+	{
+	case(DrawCallType::RECTANGLE):
+
+		// TODO: Use simd ? 
+		for (int y = rect.y; y < rect.height + rect.y; y++)
+		{
+			if (y < 0)
+			{
+				continue;
+			}
+			else if (y >= Win32App.PixelBufferHeight)
+			{
+				break;
+			}
+			for (int x = rect.x; x < rect.width + rect.x; x++)
+			{
+				if (x < 0)
+				{
+					continue;
+				}
+				else if (x >= Win32App.PixelBufferWidth)
+				{
+					break;
+				}
+
+				Win32App.PixelBuffer[y * Win32App.PixelBufferWidth + x].full = rect.color.full;
+			}
+		}
+		
+		break;
+	case(DrawCallType::ELLIPSE):
+		break;
+	default:
+		std::cerr << "WARNING: Unsupported Client Draw Call type " << static_cast<uint16_t>(Call.type) << " ! Ignoring...\n";
+		break;
+	}
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	if (Win32App.bUsingConsole)
@@ -231,7 +275,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			TranslateMessage(&message);
 			DispatchMessage(&message);
 		}
-		
+
 		// TODO Process Inputs and other events triggered by the message loop.
 
 		// Prepare frame data for next client frame.
@@ -241,6 +285,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
 		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
 		// in this software.
+
+		ClientFrameDrawCallBuffer frameDrawBuffer = ClientFrameDrawCallBuffer();
+		frameDrawBuffer.Buffer = static_cast<uint8_t*>(malloc(64000));
+		frameDrawBuffer.BufferSize = 64000;
+
+		frameData.DrawCallBuffer = &frameDrawBuffer;
 
 		// Run Client Frame
 		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
@@ -259,11 +309,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			}
 		}
 
+		// Read draw calls and process them.
+		if (!frameDrawBuffer.BeginRead())
+		{
+			std::cerr << "ERROR: Invalid client draw call buffer for frame " << frameData.FrameNumber << " skipping drawing stage.\n";
+		}
+		else
+		{
+			DrawCall* nextDrawCall = nullptr;
+			while ((nextDrawCall = frameDrawBuffer.GetNext()) != nullptr)
+			{
+				// Process Draw Call
+				ProcessDrawCall(*nextDrawCall);
+			}
+		}
+
 		// Blit updated pixels onto the Main Window.
 		BitBlt(Win32App.MainWindowDC, 0, 0, Win32App.PixelBufferWidth, Win32App.PixelBufferHeight, Win32App.MainWindowBitmapDC, 0, 0, SRCCOPY);
 		
 		// TODO Handle incoming WAV audio samples. Think about that system - in the same spirit as draw calls, should audio use an abstracted
 		// idea of "sound bytes" instead, wherein the platform & render layer could process those as it pleases, perhaps using its own sounds ?
+	
+		// Get rid of frame data. TODO Later is should be saved so a replay system can be built.
+		free(frameDrawBuffer.Buffer);
 	}
 
 	if (ClientAPI.APISuccessfullyLoaded())
