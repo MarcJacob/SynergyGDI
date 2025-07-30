@@ -210,16 +210,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	if (AppContextInitSuccessful())
 	{
 		Win32App.bRunning = true;
-
-		// Output client Hello.
-		ClientAPI.Hello();
 	}
 
 	// Create the Client Context, start the client and begin processing frames as fast as possible.
 
 	// Message processing & Drawing loop.
 	MSG message;
-	while (Win32App.bRunning )
+	while (Win32App.bRunning)
 	{
 		while (PeekMessage(&message, Win32App.MainWindow, NULL, NULL, PM_REMOVE))
 		{
