@@ -5,6 +5,8 @@
 
 #include <iostream>
 
+#include <shellapi.h>
+
 #define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
 #define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
 
@@ -35,6 +37,12 @@ static SynergyClientAPI ClientAPI;
 
 void LoadClientModule()
 {
+	HINSTANCE ReloadProgram = ShellExecute(NULL, L"open", L"UpdateClientLib.bat", L"", L"", 0);
+	
+	// Wait for reload program to do its thing.
+	// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
+	Sleep(500);
+
 	Win32App.ClientModule = LoadLibrary(WCLIENT_MODULE_FILENAME);
 	if (Win32App.ClientModule == nullptr)
 	{
@@ -53,7 +61,7 @@ void LoadClientModule()
 	}
 	
 	ClientAPI.CreateClientContext = reinterpret_cast<decltype(ClientAPI.CreateClientContext)>(GetProcAddress(Win32App.ClientModule, "CreateClientContext"));
-	if (ClientAPI.CreateClientContext == nullptr)
+	if (0 && ClientAPI.CreateClientContext == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
 		return;
@@ -76,6 +84,11 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 	case(WM_CLOSE):
 		Win32App.bRunning = false;
 		break;
+	case(WM_KEYDOWN):
+		std::cout << "Reloading Client Module.\n";
+		UnloadClientModule();
+		LoadClientModule();
+		ClientAPI.Hello();
 	default:
 		break;
 	}
@@ -120,6 +133,7 @@ void CleanupMainWindow()
 	}
 }
 
+// Allocates a Windows console and redirects Standard Out and Standard Error to it.
 void CreateConsole()
 {
 	AllocConsole();
@@ -132,6 +146,7 @@ void CreateConsole()
 	freopen_s(&fDummy, "CONOUT$", "w", stderr);
 }
 
+// Frees the Windows console.
 void CloseConsole()
 {
 	FreeConsole();
@@ -170,6 +185,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	}
 
 	CleanupMainWindow();
+
+	UnloadClientModule();
 
 	if (Win32App.bUsingConsole)
 	{
