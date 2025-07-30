@@ -1,6 +1,4 @@
-#include <SynergyClient.h>
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
+#include <Win32_ClientLibLoader.h>
 
 #include <iostream>
 #include <shellapi.h>
@@ -63,5 +61,4 @@ HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 void UnloadClientModule(HMODULE ClientModule)
 {
 	FreeLibrary(ClientModule);
-	ClientModule = 0;
 }

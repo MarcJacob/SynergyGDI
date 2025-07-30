@@ -1,16 +1,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+
 #include "SynergyClient.h"
+#include "Win32_ClientLibLoader.h"
 
 #include <iostream>
-
-// CLIENT LIBRARY MODULE LIFECYCLE FUNCTIONS
-// IMPLEMENTED IN Win32_ClientLibLoader.cpp
-
-extern HMODULE LoadClientModule(SynergyClientAPI& APIStruct);
-extern void UnloadClientModule(HMODULE ClientModule);
-
-// -----------------
 
 union PixelRGBA
 {
@@ -51,24 +45,6 @@ struct Win32AppContext
 
 static Win32AppContext Win32App;
 static SynergyClientAPI ClientAPI;
-
-void ReloadClientLibrary()
-{
-	std::cout << "Loading Synergy Client Module.\n";
-
-	if (Win32App.ClientModule != 0)
-	{
-		UnloadClientModule(Win32App.ClientModule);
-	}
-
-	Win32App.ClientModule = LoadClientModule(ClientAPI);
-
-	if (Win32App.ClientModule != 0)
-	{
-		std::cout << "Synergy Client Module loaded successfully.\n";
-		ClientAPI.Hello();
-	}
-}
 
 LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LPARAM lParam)
 {
@@ -124,7 +100,10 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 
 		break;
 	case(WM_KEYDOWN):
-		ReloadClientLibrary();
+		std::cout << "Reloading Client Module.\n";
+		UnloadClientModule(Win32App.ClientModule);
+		Win32App.ClientModule = LoadClientModule(ClientAPI);
+		ClientAPI.Hello();
 	default:
 		break;
 	}
@@ -203,7 +182,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	ReloadClientLibrary();
+	Win32App.ClientModule = LoadClientModule(ClientAPI);
 
 	CreateMainWindow();
 
