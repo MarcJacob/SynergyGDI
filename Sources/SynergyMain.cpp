@@ -23,7 +23,11 @@ struct Win32AppContext
 
 struct SynergyClientAPI
 {
+	bool bLoaded = false;
+
 	decltype(Hello)* Hello = nullptr;
+
+	void* (*CreateClientContext)() = nullptr;
 };
 
 static Win32AppContext Win32App;
@@ -40,7 +44,22 @@ void LoadClientModule()
 
 	// Load Client API functions.
 	ClientAPI = {};
+	
 	ClientAPI.Hello = reinterpret_cast<decltype(ClientAPI.Hello)>(GetProcAddress(Win32App.ClientModule, "Hello"));
+	if (ClientAPI.Hello == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
+		return;
+	}
+	
+	ClientAPI.CreateClientContext = reinterpret_cast<decltype(ClientAPI.CreateClientContext)>(GetProcAddress(Win32App.ClientModule, "CreateClientContext"));
+	if (ClientAPI.CreateClientContext == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
+		return;
+	}
+
+	ClientAPI.bLoaded = true;
 }
 
 void UnloadClientModule()
@@ -91,9 +110,14 @@ void CreateMainWindow()
 	ShowWindow(Win32App.MainWindow, 1);
 }
 
+// Cleans up resources associated with the Main Window. Closes it first if it wasn't closed already.
 void CleanupMainWindow()
 {
-
+	if (Win32App.MainWindow != nullptr)
+	{
+		CloseWindow(Win32App.MainWindow);
+		Win32App.MainWindow = nullptr;
+	}
 }
 
 void CreateConsole()
@@ -113,6 +137,12 @@ void CloseConsole()
 	FreeConsole();
 }
 
+// Runs necessary post-init checks to ensure initialization was successful and the app is in a state where it can run.
+bool AppContextInitSuccessful()
+{
+	return Win32App.MainWindow != nullptr && ClientAPI.bLoaded;
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	if (Win32App.bUsingConsole)
@@ -124,10 +154,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	CreateMainWindow();
 
-	if (Win32App.MainWindow != nullptr && Win32App.ClientModule != nullptr)
+	if (AppContextInitSuccessful())
 	{
 		Win32App.bRunning = true;
 
+		// Output client Hello.
 		ClientAPI.Hello();
 	}
 
@@ -138,8 +169,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		DispatchMessage(&message);
 	}
 
+	CleanupMainWindow();
+
 	if (Win32App.bUsingConsole)
 	{
+		system("pause");
 		CloseConsole();
 	}
 
