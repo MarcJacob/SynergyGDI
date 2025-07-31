@@ -7,17 +7,52 @@
 
 #include <stdint.h>
 
-// Generic interface for a memory manager usable by the Client for Persistent and Frame memory.
-struct ClientMemoryManager
+// Type definitions and forward declarations
+
+// Base type for Client drawcall. Always actually contains an underlying datatype defined in drawing code.
+struct DrawCall; 
+// Specific Type of a Client drawcall. Allows finding out which data structure to cast the DrawCall to.
+enum class DrawCallType; 
+
+// Unique identifier for a Viewport allocated by the Platform. Used to annotate relevant input and output.
+// Max value is considered an error value.
+typedef uint8_t ViewportID;
+constexpr ViewportID VIEWPORT_ERROR_ID = ~0;
+
+// Data associated with a single frame of the Client's execution, during which it should integrate the passage of time, react to inputs
+// and output draw calls and audio samples.
+struct ClientFrameData
 {
-	uint8_t* MemoryPtr = nullptr;
-	void* (*Allocate)(size_t Size) = nullptr;
-	void (*Free)(void* Ptr) = nullptr;
+	size_t FrameNumber;
+	float FrameTime;
+
+	// General-purpose Memory for this specific frame. Anything allocated here should be wiped automatically at the end of the frame by the platform.
+	struct
+	{
+		uint8_t* Memory;
+		size_t Size;
+	} FrameMemory;
+
+	// Requests the allocation of a new draw call for this frame, to be processed by the platform usually at the end of the frame.
+	// If successful returns a pointer to a base DrawCall structure with the correct underlying data type according to the passed type.
+	// If it fails for any reason, returns nullptr.
+	DrawCall* (*NewDrawCall)(ViewportID TargetViewportID, DrawCallType Type);
 };
 
 // Collection of platform functions that can be called from Client code.
 struct PlatformAPI
 {
+	/*
+		Synchronously requests the allocation of a new Viewport with the given properties.
+		Returns ID of new Viewport or VIEWPORT_ERROR_ID if unsuccessful.
+	*/
+	ViewportID (*AllocateViewport)(const char* DisplayName, Vector2s Dimensions) = nullptr;
+
+	/*
+		Synchronously requests the destruction of the viewport with the given ID.
+		The viewport will no longer provide inputs from the next frame onward and further output calls targeting it will be ignored.
+	*/
+	void (*DestroyViewport)(ViewportID ViewportToDestroy) = nullptr;
 };
 
 // Persistent context data for a single execution of a client. Effectively acts as the Client's static memory.
@@ -32,31 +67,20 @@ struct ClientContext
 
 	State State;
 
-	// Memory manager for persistent memory allocations whose lifetime is managed by the Client.
-	ClientMemoryManager PersistentMemory;
+	// Memory guaranteed to be persistent from the moment the client starts to when it shuts down.
+	struct
+	{
+		uint8_t* Memory;
+		size_t Size;
+	} PersistentMemory;
+	
 
 	// Current size in pixels of the Viewport, which is the virtual or real (depending on Platform implementation) surface the client uses
 	// as reference to build Draw calls.
 	Vector2s ViewportSize;
-};
 
-struct DrawCall;
-enum class DrawCallType;
-
-// Data associated with a single frame of the Client's execution, during which it should integrate the passage of time, react to inputs
-// and output draw calls and audio samples.
-struct ClientFrameData
-{
-	size_t FrameNumber;
-	float FrameTime;
-
-	// General-purpose Memory for this specific frame. Anything allocated here should be wiped automatically at the end of the frame by the platform.
-	ClientMemoryManager FrameMemory;
-
-	// Requests the allocation of a new draw call for this frame, to be processed by the platform usually at the end of the frame.
-	// If successful returns a pointer to a base DrawCall structure with the correct underlying data type according to the passed type.
-	// If it fails for any reason, returns nullptr.
-	DrawCall* (*NewDrawCall)(DrawCallType Type);
+	// Underlying Platform API, usable at any point by the client and guaranteed to be thread-safe when relevant.
+	PlatformAPI Platform;
 };
 
 // Contains function pointers associated with symbol names for easier symbol loading on the platform and to provide a centralized calling
