@@ -1,8 +1,6 @@
 #include "Platform/Win32_Platform.h"
 #include "SynergyClient.h"
-#include "SynergyClientDrawBuffer.h"
-
-#include <iostream>
+#include "SynergyClientDrawing.h"
 
 // Global context state for the Win32 application layer.
 struct Win32AppContext
@@ -29,6 +27,9 @@ struct Win32AppContext
 	// Memory arena for dynamic memory allocations in the Client app.
 	uint8_t* ClientAppMemory;
 	size_t ClientAppMemorySize;
+
+	// Draw Buffer used by outstanding client frame.
+	ClientFrameDrawCallBuffer CurrentFrameDrawBuffer;
 };
 
 static Win32AppContext Win32App;
@@ -178,6 +179,12 @@ bool AppContextInitSuccessful()
 	return Win32App.MainWindow != nullptr && ClientAPI.APISuccessfullyLoaded();
 }
 
+// Redirector function that uses the current frame draw buffer in the platform context.
+DrawCall* AllocateNewDrawCallOnCurrentFrame(DrawCallType Type)
+{
+	return Win32App.CurrentFrameDrawBuffer.NewDrawCall(Type);
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	if (Win32App.bUsingConsole)
@@ -224,11 +231,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
 		// in this software.
 
+		// Create a frame buffer and link it to Win32 Context so calls from the client to create a draw call will use that one.
+		// TODO Let's build a more robust frame management system.
 		ClientFrameDrawCallBuffer frameDrawBuffer = ClientFrameDrawCallBuffer();
 		frameDrawBuffer.Buffer = static_cast<uint8_t*>(malloc(64000));
 		frameDrawBuffer.BufferSize = 64000;
+		
+		// Set new frame draw buffer as current frame draw buffer platform-wide and link the Frame New Draw Call function to the allocation function.
+		Win32App.CurrentFrameDrawBuffer = frameDrawBuffer;
+		frameData.NewDrawCall = AllocateNewDrawCallOnCurrentFrame;
 
-		frameData.DrawCallBuffer = &frameDrawBuffer;
+		// Put the draw buffer in write mode.
+		if (!frameDrawBuffer.BeginWrite())
+		{
+			// If the buffer can't be written into for any reason, unlink Draw Call function.
+			// This will effectively disable drawing for this frame.
+			std::cerr << "ERROR: Could not set draw buffer to write mode for frame " << frameData.FrameNumber << "\n";
+			frameData.NewDrawCall = nullptr;
+		}
 
 		// Run Client Frame
 		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
@@ -261,7 +281,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// TODO Handle incoming WAV audio samples. Think about that system - in the same spirit as draw calls, should audio use an abstracted
 		// idea of "sound bytes" instead, wherein the platform & render layer could process those as it pleases, perhaps using its own sounds ?
 	
-		// Get rid of frame data. TODO Later is should be saved so a replay system can be built.
+		// Free Draw Buffer memory
 		free(frameDrawBuffer.Buffer);
 	}
 
