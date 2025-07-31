@@ -91,6 +91,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 	switch (messageType)
 	{
 	case(WM_CLOSE):
+		// Close the whole app on closing any viewport window. TODO don't do this if the viewport was destroyed from a client request,
+		// or consider making it configurable per viewport.
 		Win32App.bRunning = false;
 		break;
 	case(WM_SIZE):
@@ -163,7 +165,11 @@ void DestroyViewport(ViewportID ID)
 		}
 
 		free(Win32App.Viewports[ID].Name);
+		Win32App.Viewports[ID].Name = nullptr;
+
 		free(Win32App.Viewports[ID].ClientDrawCallBuffer.Buffer);
+		Win32App.Viewports[ID].ClientDrawCallBuffer.Buffer = nullptr;
+
 		Win32App.Viewports[ID] = {};
 		Win32App.Viewports[ID].ID = VIEWPORT_ERROR_ID;
 	}
@@ -191,15 +197,16 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 	// TODO Recycle dead viewport IDs.
 	Win32App.Viewports.emplace_back();
 	Win32Viewport& newViewport = Win32App.Viewports.back();
+	newViewport = {};
 	newViewport.ID = static_cast<ViewportID>(Win32App.Viewports.size()) - 1;
 	newViewport.Dimensions = Dimensions;
 
-	size_t nameLength = strlen(Name);
-	newViewport.Name = static_cast<WCHAR*>(malloc(nameLength + 1));
-	memset(newViewport.Name, 0, nameLength + 1);
+	size_t nameLength = strlen(Name) + 1;
+	newViewport.Name = static_cast<WCHAR*>(malloc(nameLength * 2));
+	memset(newViewport.Name, 0, nameLength);
 
 	size_t charactersConverted = 0;
-	mbstowcs_s(&charactersConverted, newViewport.Name, nameLength * 2, Name, nameLength);
+	mbstowcs_s(&charactersConverted, newViewport.Name, nameLength, Name, nameLength - 1);
 
 	newViewport.Win32WindowHandle = CreateWindow(MAIN_WINDOW_CLASS_NAME, newViewport.Name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, Dimensions.x, Dimensions.y,
 		NULL, NULL, Win32App.ProgramInstance, NULL);
