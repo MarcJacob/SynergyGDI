@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Platform/Win32_ClientLibLoader.inc"
+#include "Platform/Win32_Drawing.inc"
 
 struct Win32Viewport
 {
@@ -275,20 +276,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	ReloadClientLibrary();
 
+	// Create main Client Context.
+	ClientContext ClientRunningContext = {};
+
 	if (AppContextInitSuccessful())
 	{
+		// Let the party begin
 		Win32App.bRunning = true;
+
+		// Start the client and begin processing frames as fast as possible.
+		ClientRunningContext.PersistentMemory.Memory = static_cast<uint8_t*>(malloc(128000));
+		ClientRunningContext.PersistentMemory.Size = 128000;
+
+		ClientRunningContext.Platform.AllocateViewport = AllocateViewport;
+		ClientRunningContext.Platform.DestroyViewport = DestroyViewport;
+
+		ClientAPI.StartClient(ClientRunningContext);
 	}
-
-	// Create the Client Context, start the client and begin processing frames as fast as possible.
-	ClientContext ClientRunningContext = {};
-	ClientRunningContext.PersistentMemory.Memory = static_cast<uint8_t*>(malloc(128000));
-	ClientRunningContext.PersistentMemory.Size = 128000;
-
-	ClientRunningContext.Platform.AllocateViewport = AllocateViewport;
-	ClientRunningContext.Platform.DestroyViewport = DestroyViewport;
-
-	ClientAPI.StartClient(ClientRunningContext);
+	else
+	{
+		std::cerr << "FATAL ERROR: Platform initialization failed ! Ending program.\n";
+	}
 
 	// Frame tracking
 	size_t frameCounter = 0;
@@ -395,7 +403,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 		DestroyViewport(viewport.ID);
 	}
-
+PROGRAM_END:
 	if (Win32App.bUsingConsole)
 	{
 		system("pause");

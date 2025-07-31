@@ -18,6 +18,8 @@ HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 	// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
 	Sleep(250);
 
+	APIStruct = {};
+
 	HMODULE clientModule = LoadLibrary(WCLIENT_MODULE_FILENAME);
 	if (clientModule == nullptr)
 	{
