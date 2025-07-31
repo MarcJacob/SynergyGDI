@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include "Platform/Win32_ClientLibLoader.inc"
+
 struct Win32Viewport
 {
 	ViewportID ID;
