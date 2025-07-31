@@ -1,6 +1,10 @@
 @echo off
-set ClientLibPath=..\Synergy\Build\x64\Debug\
+
+:: Note: We assume that the Synergy project is located in a folder that is a "sibling" of the SynergyGDI root folder. If it isn't, adapt this variable.
+set SynergyProjectPath=..\Synergy\
+set ClientLibPath=%SynergyProjectPath%Build\SynergyClientLib\
+set ClientIncludesPath=%SynergyProjectPath%SynergyClientLib\Sources\Public\
 
 xcopy %ClientLibPath%SynergyClientLib.dll %__CD__%\Build\ /E /Y
 rmdir /Q /S %__CD__%Dependencies\ClientIncludes\
-xcopy %ClientLibPath%\ClientIncludes\ %__CD__%Dependencies\ClientIncludes\ /E /Y
+xcopy %ClientIncludesPath% %__CD__%Dependencies\ClientIncludes\ /E /Y

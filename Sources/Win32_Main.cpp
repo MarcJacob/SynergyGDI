@@ -403,7 +403,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 		DestroyViewport(viewport.ID);
 	}
-PROGRAM_END:
+
 	if (Win32App.bUsingConsole)
 	{
 		system("pause");
