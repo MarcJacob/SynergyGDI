@@ -2,7 +2,7 @@
 
 #include "Platform/Win32_Platform.h"
 
-#include <SynergyClient.h>
+#include <SynergyClient/SynergyClient.h>
 
 #include <iostream>
 #include <shellapi.h>
