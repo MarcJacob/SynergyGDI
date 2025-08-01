@@ -4,13 +4,13 @@
 #include "SynergyClientDrawing.h"
 
 #ifndef TRANSLATION_UNIT
-#error THIS FILE MUST BE INCLUDED INSIDE ANOTHER TRANSLATION UNIT, NOT COMPILED ON ITS OWN !
+static_assert(0, "INC File " __FILE__ " must be included within a translation unit and NOT compiled on its own !");
 #endif
 
 #ifndef WIN32_DRAWING_INCLUDED
 #define WIN32_DRAWING_INCLUDED
 #else
-#error INCLUDE IMPLEMENTATION FILE "Win32_Drawing_INC.cpp" HAS BEEN INCLUDED MULTIPLE TIMES !
+static_assert(0, "INC File " __FILE__ " has been included twice !");
 #endif
 
 /*

@@ -7,6 +7,16 @@
 #include <iostream>
 #include <shellapi.h>
 
+#ifndef TRANSLATION_UNIT
+static_assert(0, "INC File " __FILE__ " must be included within a translation unit and NOT compiled on its own !");
+#endif
+
+#ifndef WIN32_CLIENTLIBLOADER_INCLUDED
+#define WIN32_CLIENTLIBLOADER_INCLUDED
+#else
+static_assert(0, "INC File " __FILE__ " has been included twice !");
+#endif
+
 #define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
 #define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
 
