@@ -20,13 +20,24 @@ static_assert(0, "INC File " __FILE__ " has been included twice !");
 #define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
 #define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
 
+#define LIB_RELOAD_PROGRAM_PATH L".\\RefreshDependencies.bat" // TODO Make it configurable.
+
 HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 {
-	HINSTANCE reloadProgram = ShellExecute(NULL, L"open", L"UpdateClientLib.bat", L"", L"", 0);
+	// Attempt to launch Lib Reload Program.
+	SHELLEXECUTEINFO execInfo = {};
+	execInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+	execInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+	execInfo.lpVerb = L"open";
+	execInfo.lpFile = LIB_RELOAD_PROGRAM_PATH;
 
-	// Wait for reload program to do its thing.
-	// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
-	Sleep(250);
+	if (ShellExecuteEx(&execInfo))
+	{
+		// Wait for reload program to do its thing.
+		// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
+		WaitForSingleObject(execInfo.hProcess, 2000);
+		CloseHandle(execInfo.hProcess);
+	}
 
 	APIStruct = {};
 
