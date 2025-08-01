@@ -1,6 +1,6 @@
 // Symbol definitions for processing draw calls and generally drawing to the screen for the Win32 platform.
 
-#include "Win32_Platform.h"
+#include "Platform/Win32_Platform.h"
 #include "SynergyClientDrawing.h"
 
 /*

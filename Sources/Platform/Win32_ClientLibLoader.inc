@@ -1,6 +1,6 @@
 // Synergy Client Module & API Loading implementation. The symbols are referenced and used in Win32_Main.cpp.
 
-#include "Win32_Platform.h"
+#include "Platform/Win32_Platform.h"
 
 #include <SynergyClient.h>
 
