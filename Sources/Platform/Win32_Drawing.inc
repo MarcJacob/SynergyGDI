@@ -1,7 +1,7 @@
 // Symbol definitions for processing draw calls and generally drawing to the screen for the Win32 platform.
 
 #include "Platform/Win32_Platform.h"
-#include "SynergyClient/SynergyClientDrawing.h"
+#include "SynergyClientDrawing.h"
 
 /*
 	Returns the expected actual size of a draw call data structure.

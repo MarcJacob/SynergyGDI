@@ -1,6 +1,6 @@
 #include "Platform/Win32_Platform.h"
-#include "SynergyClient/SynergyClient.h"
-#include "SynergyClient/SynergyClientDrawing.h"
+#include "SynergyClient.h"
+#include "SynergyClientDrawing.h"
 
 #include <vector>
 
