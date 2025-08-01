@@ -15,9 +15,17 @@
 */
 struct Win32Viewport
 {
+	// Unique identifier for this viewport, used by the client to reference it.
 	ViewportID ID;
-	Vector2s Dimensions; // Dimensions requested at creation. The client will assume this is the size of the viewport.
-	WCHAR* Name;
+
+	// Dimensions requested at creation. The client will assume this is the size of the viewport so the platform should leave it alone.
+	Vector2s Dimensions; 
+	
+	// Name used by viewport if real name can't be assigned or retrieved for any reason.
+	static constexpr WCHAR* ERROR_NAME = L"VIEWPORT_NAME_ERROR"; 
+	
+	// Display name of the viewport.
+	WCHAR* Name; 
 
 	// Window & Bitmap data
 	HWND Win32WindowHandle;
@@ -30,15 +38,20 @@ struct Win32Viewport
 	uint16_t PixelBufferWidth;
 	uint16_t PixelBufferHeight;
 
+	// Draw Call buffer, filled in via client requests.
 	ClientFrameDrawCallBuffer ClientDrawCallBuffer;
 };
 
 // Global context state for the Win32 application layer.
 struct Win32AppContext
 {
+	// Win32 Program Process instance.
 	HINSTANCE ProgramInstance;
+
+	// Whether the app is actively running client frames.
 	bool bRunning = false;
 
+	// Whether the program should allocate a console and output debug info to it. TODO: Make this configurable.
 	bool bUsingConsole = true;
 
 	// Synergy Client dll module
@@ -80,6 +93,7 @@ bool ViewportIsValid(ViewportID ID)
 
 Win32Viewport* FindViewportFromWindowHandle(HWND windowHandle)
 {
+	// Simple linear search - we should never have too many viewports at once on this platform anyway.
 	for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 	{
 		if (!ViewportIsValid(viewportID)) continue;
@@ -130,10 +144,12 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 			break;
 		}
 
+		// Update viewport Buffer data. Leave Dimensions as is as it will keep being used by the client.
 		viewport->PixelBufferWidth = newWidth;
 		viewport->PixelBufferHeight = newHeight;
 		viewport->PixelBuffer = nullptr;
 			
+		// Init bitmap info for 32 bits RGBA format pixels.
 		bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo);
 		bitmapInfo.bmiHeader.biWidth = newWidth;
 		bitmapInfo.bmiHeader.biHeight = -newHeight; // Let's stick to upper-left origin.
@@ -141,6 +157,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 		bitmapInfo.bmiHeader.biBitCount = 32;
 		bitmapInfo.bmiHeader.biCompression = BI_RGB;
 
+		// Create Device-Independent Bitmap section and link the viewport's buffer memory to it.
 		viewport->DrawingBitmap = CreateDIBSection(viewport->Win32WindowDC, &bitmapInfo,
 			DIB_RGB_COLORS, reinterpret_cast<void**>(&viewport->PixelBuffer), NULL, NULL);
 
@@ -149,7 +166,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 			std::cerr << "ERROR: Failed to allocate bitmap if size " << newWidth << " x " << newHeight << " !\n";
 			break;
 		}
-
+		
+		// Retrieve Bitmap DC to be used to copy the bitmap memory onto the viewport's window.
 		viewport->DrawingBitmapDC = CreateCompatibleDC(viewport->Win32WindowDC);
 		SelectObject(viewport->DrawingBitmapDC, viewport->DrawingBitmap);
 
@@ -167,20 +185,40 @@ void DestroyViewport(ViewportID ID)
 {
 	if (ViewportIsValid(ID))
 	{
-		if (Win32App.Viewports[ID].Win32WindowHandle != nullptr)
+		Win32Viewport& viewport = Win32App.Viewports[ID];
+
+		// If Win32 window exists for this viewport, close it.
+		if (viewport.Win32WindowHandle != nullptr)
 		{
-			CloseWindow(Win32App.Viewports[ID].Win32WindowHandle);
-			Win32App.Viewports[ID].Win32WindowHandle = nullptr;
+			CloseWindow(viewport.Win32WindowHandle);
+			viewport.Win32WindowHandle = nullptr;
 		}
 
-		free(Win32App.Viewports[ID].Name);
-		Win32App.Viewports[ID].Name = nullptr;
+		// Free Viewport name if it is not using Error name.
+		if (viewport.Name != nullptr && lstrcmp(viewport.Name, Win32Viewport::ERROR_NAME) != 0)
+		{
+			free(viewport.Name);
+			viewport.Name = nullptr;
+		}
 
-		free(Win32App.Viewports[ID].ClientDrawCallBuffer.Buffer);
-		Win32App.Viewports[ID].ClientDrawCallBuffer.Buffer = nullptr;
+		// Free Draw Buffer.
+		if (viewport.ClientDrawCallBuffer.Buffer != nullptr)
+		{
+			free(viewport.ClientDrawCallBuffer.Buffer);
+			viewport.ClientDrawCallBuffer.Buffer = nullptr;
+		}
 
-		Win32App.Viewports[ID] = {};
-		Win32App.Viewports[ID].ID = VIEWPORT_ERROR_ID;
+		// Free associated bitmap.
+		if (viewport.DrawingBitmap > 0)
+		{
+			DeleteObject(viewport.DrawingBitmap);
+			viewport.DrawingBitmap = NULL;
+			viewport.DrawingBitmapDC = NULL;
+		}
+		
+		// Reset viewport and give it the Error ID.
+		viewport = {};
+		viewport.ID = VIEWPORT_ERROR_ID;
 	}
 }
 
@@ -203,6 +241,7 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 		MAIN_WINDOW_CLASS_REGISTERED = true;
 	}
 	
+	// Initialize new viewport.
 	// TODO Recycle dead viewport IDs.
 	Win32App.Viewports.emplace_back();
 	Win32Viewport& newViewport = Win32App.Viewports.back();
@@ -210,13 +249,28 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 	newViewport.ID = static_cast<ViewportID>(Win32App.Viewports.size()) - 1;
 	newViewport.Dimensions = Dimensions;
 
+	// Convert provided ANSI viewport name to UNICODE.
 	size_t nameLength = strlen(Name) + 1;
 	newViewport.Name = static_cast<WCHAR*>(malloc(nameLength * 2));
-	memset(newViewport.Name, 0, nameLength);
 
-	size_t charactersConverted = 0;
-	mbstowcs_s(&charactersConverted, newViewport.Name, nameLength, Name, nameLength - 1);
+	if (newViewport.Name != nullptr)
+	{
+		memset(newViewport.Name, 0, nameLength);
+		size_t charactersConverted = 0;
 
+		if (mbstowcs_s(&charactersConverted, newViewport.Name, nameLength, Name, nameLength - 1) != 0)
+		{
+			newViewport.Name = nullptr;
+		}
+	}
+	
+	// Use Error Name if Name is still null for any reason.
+	if (newViewport.Name == nullptr)
+	{
+		newViewport.Name = Win32Viewport::ERROR_NAME;
+	}
+
+	// Create Win32 Window.
 	newViewport.Win32WindowHandle = CreateWindow(MAIN_WINDOW_CLASS_NAME, newViewport.Name, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, Dimensions.x, Dimensions.y,
 		NULL, NULL, Win32App.ProgramInstance, NULL);
 
@@ -227,6 +281,7 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 		return VIEWPORT_ERROR_ID;
 	}
 
+	// Cache Window Device Context. It will be used to tie Bitmaps created on Size events to the window.
 	newViewport.Win32WindowDC = GetDC(newViewport.Win32WindowHandle);
 
 	// Allocate Frame Buffer for the viewport.
@@ -236,6 +291,7 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 
 	newViewport.ClientDrawCallBuffer = frameDrawBuffer;
 
+	// Show Window immediately and return the viewport ID.
 	ShowWindow(newViewport.Win32WindowHandle, 1);
 	return newViewport.ID;
 }
@@ -266,7 +322,7 @@ bool AppContextInitSuccessful()
 }
 
 // Redirector function that uses the current frame draw buffer in the platform context.
-DrawCall* AllocateNewDrawCallOnCurrentFrame(ViewportID TargetViewportID, DrawCallType Type)
+DrawCall* AllocateNewDrawCall(ViewportID TargetViewportID, DrawCallType Type)
 {
 	return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
 }
@@ -356,7 +412,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// in this software.
 	
 		// Assign Frame System Calls
-		frameData.NewDrawCall = AllocateNewDrawCallOnCurrentFrame;
+		frameData.NewDrawCall = AllocateNewDrawCall;
 	}
 
 	size_t frameCounter = 0;
@@ -405,13 +461,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		}
 
 		// Run Client Frame
-		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
 		ClientAPI.RunClientFrame(clientRunningContext, frameData);
 
 		// Drawing pass - rasterize all incoming draw calls after clearing the screen to black.
 
 		// Read draw calls and process them.
-		// TODO: This could be multithreaded, once rendering as a whole gets its own thread.
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;
@@ -420,33 +474,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			// Clear screen to blue.
 			ClearPixelBuffer(0xFF000000, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
 			
-
 			if (!viewport.ClientDrawCallBuffer.BeginRead())
 			{
 				std::cerr << "ERROR: Invalid client draw call buffer for frame " << frameData.FrameNumber << " skipping drawing stage.\n";
+				continue;
 			}
-			else
+
+			DrawCall* nextDrawCall = nullptr;
+			while ((nextDrawCall = Win32App.Viewports[viewportID].ClientDrawCallBuffer.GetNext()) != nullptr)
 			{
-				DrawCall* nextDrawCall = nullptr;
-				while ((nextDrawCall = Win32App.Viewports[viewportID].ClientDrawCallBuffer.GetNext()) != nullptr)
-				{
-					// Process Draw Call
-					ProcessDrawCall(*nextDrawCall, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
-				}
+				ProcessDrawCall(*nextDrawCall, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
 			}
 		}
 
+		// Blit updated pixels onto each Viewport's window.
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;
 			Win32Viewport& viewport = Win32App.Viewports[viewportID];
-
-			// Blit updated pixels onto the Main Window.
+			
 			BitBlt(viewport.Win32WindowDC, 0, 0, viewport.PixelBufferWidth, viewport.PixelBufferHeight, viewport.DrawingBitmapDC, 0, 0, SRCCOPY);
 		}
 
-		// TODO Handle incoming WAV audio samples. Think about that system - in the same spirit as draw calls, should audio use an abstracted
-		// idea of "sound bytes" instead, wherein the platform & render layer could process those as it pleases, perhaps using its own sounds ?
+		// TODO Handle incoming WAV audio samples.
 	}
 
 	OnProgramEnd();
