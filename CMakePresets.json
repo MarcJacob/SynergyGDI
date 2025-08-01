@@ -1,17 +1,28 @@
 {
     "version": 3,
     "configurePresets": [
-        {
-            "name": "default",
-            "description": "Default build system for Synergy GDI",
-            "hidden": false,
-            "generator": "Unix Makefiles",
-            "binaryDir": "${workspaceFolder}/build",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
-                "CMAKE_CXX_COMPILER": "cl"
-            }
+      {
+        "name": "default",
+        "description": "Default build system for Synergy GDI",
+        "hidden": false,
+        "generator": "Unix Makefiles",
+        "binaryDir": "./Build",
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Debug",
+          "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+          "CMAKE_CXX_COMPILER": "cl"
         }
+      },
+      {
+        "name": "VS",
+        "description": "Visual Studio build system for Synergy GDI, to be used from inside VS.",
+        "hidden": false,
+        "binaryDir": "./Build",
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Debug",
+          "CMAKE_EXPORT_COMPILE_COMMANDS": "YES",
+          "CMAKE_CXX_COMPILER": "cl"
+        }
+      }
     ]
 }
