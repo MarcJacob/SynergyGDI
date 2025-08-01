@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#define TRANSLATION_UNIT
 #include "Platform/Win32_ClientLibLoader_INC.cpp"
 #include "Platform/Win32_Drawing_INC.cpp"
 

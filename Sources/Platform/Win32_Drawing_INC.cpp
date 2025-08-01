@@ -3,6 +3,16 @@
 #include "Platform/Win32_Platform.h"
 #include "SynergyClientDrawing.h"
 
+#ifndef TRANSLATION_UNIT
+#error THIS FILE MUST BE INCLUDED INSIDE ANOTHER TRANSLATION UNIT, NOT COMPILED ON ITS OWN !
+#endif
+
+#ifndef WIN32_DRAWING_INCLUDED
+#define WIN32_DRAWING_INCLUDED
+#else
+#error INCLUDE IMPLEMENTATION FILE "Win32_Drawing_INC.cpp" HAS BEEN INCLUDED MULTIPLE TIMES !
+#endif
+
 /*
 	Returns the expected actual size of a draw call data structure.
 	Returns 0 if the call is invalid for any reason.
