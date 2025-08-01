@@ -7,6 +7,12 @@
 #include "Platform/Win32_ClientLibLoader.inc"
 #include "Platform/Win32_Drawing.inc"
 
+/* 
+	Viewport structure for the Win32 Platform, created by request of the Client.
+	For now every viewport should spawn a separate window, and closing any of them should end the program.
+	Once a more robust viewport management system with parent / child relationships and events is in, it will be
+	possible to complexify their behavior.
+*/
 struct Win32Viewport
 {
 	ViewportID ID;
@@ -38,12 +44,12 @@ struct Win32AppContext
 	// Synergy Client dll module
 	HMODULE ClientModule;
 
-	// Memory arena for dynamic memory allocations in the Client app.
-	uint8_t* ClientAppMemory;
-	size_t ClientAppMemorySize;
-
 	// Active Viewports
 	std::vector<Win32Viewport> Viewports;
+
+	// Client context & frame data.
+	ClientContext ClientRunningContext;
+	ClientFrameData ClientFrameData;
 };
 
 static Win32AppContext Win32App;
@@ -265,6 +271,48 @@ DrawCall* AllocateNewDrawCallOnCurrentFrame(ViewportID TargetViewportID, DrawCal
 	return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
 }
 
+// Final program cleanup code ran when the program ends for ANY reason.
+void OnProgramEnd()
+{
+	// Deallocate client frame memory
+	if (Win32App.ClientFrameData.FrameMemory.Memory != nullptr)
+	{
+		free(Win32App.ClientFrameData.FrameMemory.Memory);
+		Win32App.ClientFrameData.FrameMemory.Memory = nullptr;
+		Win32App.ClientFrameData.FrameMemory.Size = 0;
+	}
+	
+	// Deallocate client persistent memory
+	if (Win32App.ClientRunningContext.PersistentMemory.Memory != nullptr)
+	{
+		free(Win32App.ClientRunningContext.PersistentMemory.Memory);
+		Win32App.ClientRunningContext.PersistentMemory.Memory = nullptr;
+		Win32App.ClientRunningContext.PersistentMemory.Size = 0;
+	}
+
+	// If Client API was ever successfully loaded, unload it.
+	if (ClientAPI.APISuccessfullyLoaded())
+	{
+		ClientAPI.ShutdownClient(Win32App.ClientRunningContext);
+		UnloadClientModule(Win32App.ClientModule);
+	}
+
+	// Destroy remaining viewports.
+	for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
+	{
+		if (!ViewportIsValid(viewportID)) continue;
+		Win32Viewport& viewport = Win32App.Viewports[viewportID];
+
+		DestroyViewport(viewport.ID);
+	}
+
+	if (Win32App.bUsingConsole)
+	{
+		system("pause");
+		CloseConsole();
+	}
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	Win32App.ProgramInstance = hInstance;
@@ -276,33 +324,48 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	ReloadClientLibrary();
 
-	// Create main Client Context.
-	ClientContext ClientRunningContext = {};
 
-	if (AppContextInitSuccessful())
-	{
-		// Let the party begin
-		Win32App.bRunning = true;
-
-		// Start the client and begin processing frames as fast as possible.
-		ClientRunningContext.PersistentMemory.Memory = static_cast<uint8_t*>(malloc(128000));
-		ClientRunningContext.PersistentMemory.Size = 128000;
-
-		ClientRunningContext.Platform.AllocateViewport = AllocateViewport;
-		ClientRunningContext.Platform.DestroyViewport = DestroyViewport;
-
-		ClientAPI.StartClient(ClientRunningContext);
-	}
-	else
+	if (!AppContextInitSuccessful())
 	{
 		std::cerr << "FATAL ERROR: Platform initialization failed ! Ending program.\n";
+		OnProgramEnd();
+		return 1;
 	}
 
-	// Frame tracking
+	// Initialize Client Context & Run Client Start, if the app initialized successfully.
+	ClientContext& clientRunningContext = Win32App.ClientRunningContext;
+
+	// Start the client
+	clientRunningContext.PersistentMemory.Memory = static_cast<uint8_t*>(malloc(128000));
+	clientRunningContext.PersistentMemory.Size = 128000;
+
+	clientRunningContext.Platform.AllocateViewport = AllocateViewport;
+	clientRunningContext.Platform.DestroyViewport = DestroyViewport;
+
+	ClientAPI.StartClient(clientRunningContext);
+
+	// Frame data
+
+	ClientFrameData& frameData = Win32App.ClientFrameData;
+	{
+		frameData.FrameMemory.Memory = static_cast<uint8_t*>(malloc(32000));
+		frameData.FrameMemory.Size = 32000;
+		frameData.FrameNumber = 0;
+		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
+		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
+		// in this software.
+	
+		// Assign Frame System Calls
+		frameData.NewDrawCall = AllocateNewDrawCallOnCurrentFrame;
+	}
+
 	size_t frameCounter = 0;
 
 	// Message processing & Drawing loop.
 	MSG message;
+
+	// Let the party begin
+	Win32App.bRunning = true;
 	while (Win32App.bRunning)
 	{
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
@@ -317,16 +380,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 		// TODO Process Inputs and other events triggered by the message loop.
 
-		// Prepare frame data for next client frame.
-		ClientFrameData frameData = {};
-		frameData.FrameMemory.Memory = static_cast<uint8_t*>(malloc(32000));
-		frameData.FrameMemory.Size = 32000;
-		frameData.FrameNumber = frameCounter++;
-		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
-		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
-		// in this software.
+		// Reset frame data for next client frame.
+		{
+			// Increment Frame Counter
+			frameData.FrameNumber = frameCounter++;
+			
+			// Reset frame memory
+			memset(frameData.FrameMemory.Memory, 0, frameData.FrameMemory.Size);
 
-		frameData.NewDrawCall = AllocateNewDrawCallOnCurrentFrame;
+			// TODO Update frame time ?
+		}
 
 		// Put the draw buffers in write mode.
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
@@ -343,7 +406,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 		// Run Client Frame
 		// TODO: Somehow retrieve draw calls, audio samples and whatever other outputs the Client gives us.
-		ClientAPI.RunClientFrame(ClientRunningContext, frameData);
+		ClientAPI.RunClientFrame(clientRunningContext, frameData);
 
 		// Drawing pass - rasterize all incoming draw calls after clearing the screen to black.
 
@@ -382,33 +445,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			BitBlt(viewport.Win32WindowDC, 0, 0, viewport.PixelBufferWidth, viewport.PixelBufferHeight, viewport.DrawingBitmapDC, 0, 0, SRCCOPY);
 		}
 
-		// Deallocate frame memory
-		free(frameData.FrameMemory.Memory);
-
 		// TODO Handle incoming WAV audio samples. Think about that system - in the same spirit as draw calls, should audio use an abstracted
 		// idea of "sound bytes" instead, wherein the platform & render layer could process those as it pleases, perhaps using its own sounds ?
 	}
 
-	if (ClientAPI.APISuccessfullyLoaded())
-	{
-		ClientAPI.ShutdownClient(ClientRunningContext);
-		UnloadClientModule(Win32App.ClientModule);
-	}
-
-	// Destroy remaining viewports.
-	for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
-	{
-		if (!ViewportIsValid(viewportID)) continue;
-		Win32Viewport& viewport = Win32App.Viewports[viewportID];
-
-		DestroyViewport(viewport.ID);
-	}
-
-	if (Win32App.bUsingConsole)
-	{
-		system("pause");
-		CloseConsole();
-	}
-
+	OnProgramEnd();
 	return 0;
 }
