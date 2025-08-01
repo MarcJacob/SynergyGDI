@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "Platform/Win32_ClientLibLoader.inc"
-#include "Platform/Win32_Drawing.inc"
+#include "Platform/Win32_ClientLibLoader_INC.cpp"
+#include "Platform/Win32_Drawing_INC.cpp"
 
 /* 
 	Viewport structure for the Win32 Platform, created by request of the Client.

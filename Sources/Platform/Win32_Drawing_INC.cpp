@@ -123,13 +123,7 @@ DrawCall* ClientFrameDrawCallBuffer::GetNext()
 
 void ClearPixelBuffer(PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
-	for (int x = 0; x < BufferWidth; x++)
-	{
-		for (int y = 0; y < BufferHeight; y++)
-		{
-			PixelBuffer[y * BufferWidth + x].full = 0xff000000;
-		}
-	}
+	memset(PixelBuffer, PixelColor.full, BufferWidth * BufferHeight * sizeof(PixelRGBA));
 }
 
 void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
