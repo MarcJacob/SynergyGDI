@@ -5,6 +5,8 @@
 
 #include <SynergyCore.h>
 
+#include "SynergyClientInput.h"
+
 #include <stdint.h>
 
 // Type definitions and forward declarations
@@ -14,10 +16,8 @@ struct DrawCall;
 // Specific Type of a Client drawcall. Allows finding out which data structure to cast the DrawCall to.
 enum class DrawCallType; 
 
-// Unique identifier for a Viewport allocated by the Platform. Used to annotate relevant input and output.
-// Max value is considered an error value.
-typedef uint8_t ViewportID;
-constexpr ViewportID VIEWPORT_ERROR_ID = ~0;
+// Base type for an Input Event. Much like drawcalls they always actually contain an underlying full datatype defined in input management code.
+struct ActionInputEvent;
 
 // Data associated with a single frame of the Client's execution, during which it should integrate the passage of time, react to inputs
 // and output draw calls and audio samples.
@@ -32,6 +32,13 @@ struct ClientFrameData
 		uint8_t* Memory;
 		size_t Size;
 	} FrameMemory;
+
+	// Input events to be processed during this frame. It is assumed the platform will have sorted the buffer from oldest to newest event.
+	struct
+	{
+		ActionInputEvent* Buffer;
+		size_t EventCount;
+	} InputEvents;
 
 	// Requests the allocation of a new draw call for this frame, to be processed by the platform usually at the end of the frame.
 	// If successful returns a pointer to a base DrawCall structure with the correct underlying data type according to the passed type.

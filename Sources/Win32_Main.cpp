@@ -1,6 +1,7 @@
-#include "Platform/Win32_Platform.h"
 #include "SynergyClient.h"
 #include "SynergyClientDrawing.h"
+
+#include "Platform/Win32_Platform.h"
 
 #include <vector>
 
@@ -43,6 +44,13 @@ struct Win32Viewport
 	ClientFrameDrawCallBuffer ClientDrawCallBuffer;
 };
 
+struct Win32ActionInputBuffer
+{
+	ActionInputEvent* Buffer;
+	size_t EventCount;
+	size_t MaxEventCount;
+};
+
 // Global context state for the Win32 application layer.
 struct Win32AppContext
 {
@@ -64,6 +72,9 @@ struct Win32AppContext
 	// Client context & frame data.
 	ClientContext ClientRunningContext;
 	ClientFrameData ClientFrameData;
+
+	// Input buffer currently being filled in.
+	Win32ActionInputBuffer* InputBackbuffer;
 };
 
 static Win32AppContext Win32App;
@@ -105,6 +116,55 @@ Win32Viewport* FindViewportFromWindowHandle(HWND windowHandle)
 		}
 	}
 	return nullptr;
+}
+
+/* Builds and records an action input for the given keyboard key code and viewport, putting it in whatever buffer(s) are appropriate. */
+void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, bool bRelease)
+{
+	// Check that there is a backbuffer ready.
+	if (Win32App.InputBackbuffer == nullptr
+		&& Win32App.InputBackbuffer->EventCount >= Win32App.InputBackbuffer->MaxEventCount)
+	{
+		return;
+	}
+
+	ActionInputEvent& event = Win32App.InputBackbuffer->Buffer[Win32App.InputBackbuffer->EventCount];
+
+	// Determine keycode then fill in the input event.
+	ActionKey key = ActionKey::ACTION_KEY_NONE;
+
+	// Numbers
+	if (Keycode >= '0' && Keycode <= '9')
+	{
+		key = static_cast<ActionKey>((Keycode) - '0' + static_cast<uint8_t>(ActionKey::NUMBERS_START));
+	}
+	// Letters
+	else if (Keycode >= 'A' && Keycode <= 'Z')
+	{
+		key = static_cast<ActionKey>((Keycode) - 'A' + static_cast<uint8_t>(ActionKey::LETTERS_START));
+	}
+	// Arrow keys
+	else if (Keycode >= VK_LEFT && Keycode <= VK_DOWN)
+	{
+		key = static_cast<ActionKey>((Keycode) - VK_LEFT + static_cast<uint8_t>(ActionKey::ARROW_KEYS_START));
+		std::cout << "Arrow key event. Release = " << bRelease << "\n";
+	}
+	// TODO Handle all other action keys.
+
+	if (key == ActionKey::ACTION_KEY_NONE)
+	{
+		// Unsupported input.
+		return;
+	}
+
+	// Fill in other properties.
+	event.Key = key;
+	event.bRelease = bRelease;
+	event.TimeNormalized = 0.f;
+	event.Viewport = Viewport.ID;
+
+	// Increment number of events in the buffer.
+	Win32App.InputBackbuffer->EventCount++;
 }
 
 LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LPARAM lParam)
@@ -174,7 +234,17 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 
 		break;
 	case(WM_KEYDOWN):
-		ReloadClientLibrary();
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, wParam, false);			
+		}
+		break;
+	case(WM_KEYUP):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, wParam, true);			
+		}
+		break;
 	default:
 		break;
 	}
@@ -416,7 +486,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		frameData.NewDrawCall = AllocateNewDrawCall;
 	}
 
-	size_t frameCounter = 0;
+	// Input buffers
+	Win32ActionInputBuffer inputBuffers[2];
+	inputBuffers[0].Buffer = static_cast<ActionInputEvent*>(malloc(sizeof(ActionInputEvent) * 64));
+	memset(inputBuffers[0].Buffer, 0, sizeof(ActionInputEvent) * 64);
+	inputBuffers[0].EventCount = 0;
+	inputBuffers[0].MaxEventCount = 64;
+
+	inputBuffers[1].Buffer = static_cast<ActionInputEvent*>(malloc(sizeof(ActionInputEvent) * 64));
+	memset(inputBuffers[1].Buffer, 0, sizeof(ActionInputEvent) * 64);
+	inputBuffers[1].EventCount = 0;
+	inputBuffers[1].MaxEventCount = 64;
+
+	// Set first backbuffer to index 0
+	int inputBackbufferIndex = 0;
+	Win32App.InputBackbuffer = &inputBuffers[inputBackbufferIndex];
 
 	// Message processing & Drawing loop.
 	MSG message;
@@ -440,10 +524,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		// Reset frame data for next client frame.
 		{
 			// Increment Frame Counter
-			frameData.FrameNumber = frameCounter++;
+			frameData.FrameNumber++;
 			
 			// Reset frame memory
 			memset(frameData.FrameMemory.Memory, 0, frameData.FrameMemory.Size);
+
+			// Switch input buffers and assign the new frontbuffer to frame.
+			if (inputBackbufferIndex == 0)
+			{
+				inputBackbufferIndex = 1;
+				frameData.InputEvents.Buffer = inputBuffers[0].Buffer;
+				frameData.InputEvents.EventCount = inputBuffers[0].EventCount;
+			}
+			else
+			{
+				inputBackbufferIndex = 0;
+				frameData.InputEvents.Buffer = inputBuffers[1].Buffer;
+				frameData.InputEvents.EventCount = inputBuffers[1].EventCount;
+			}
+
+			// Reset new backbuffer and assign it to application context.
+			inputBuffers[inputBackbufferIndex].EventCount = 0;
+			memset(inputBuffers[inputBackbufferIndex].Buffer, 0, inputBuffers[inputBackbufferIndex].MaxEventCount * sizeof(ActionInputEvent));
+			Win32App.InputBackbuffer = &inputBuffers[inputBackbufferIndex];
 
 			// TODO Update frame time ?
 		}
