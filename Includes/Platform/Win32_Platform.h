@@ -16,7 +16,7 @@ void UnloadClientModule(SynergyClientAPI& API);
 void ReloadClientModule(SynergyClientAPI& API);
 
 // Checks if a new Client library version is available for hotreload, and if there is, do it immediately.
-void TryRefreshClientModule();
+void TryRefreshClientModule(SynergyClientAPI& API);
 
 struct DrawCall;
 enum class DrawCallType;

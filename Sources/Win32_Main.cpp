@@ -131,7 +131,6 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 	else if (Keycode >= VK_LEFT && Keycode <= VK_DOWN)
 	{
 		key = static_cast<ActionKey>((Keycode) - VK_LEFT + static_cast<uint8_t>(ActionKey::ARROW_KEYS_START));
-		std::cout << "Arrow key event. Release = " << bRelease << "\n";
 	}
 	// TODO Handle all other action keys.
 

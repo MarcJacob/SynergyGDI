@@ -122,13 +122,13 @@ void ReloadClientModule(SynergyClientAPI& API)
 	std::cout << "Loading Synergy Client Module.\n";
 
 	// Locate library file. Copy it to a temporary target in the working directory and load it.
-	std::string FinalClientModuleName;
-	std::string FinalClientSymbolsName;
-	GetModuleAndSymbolsName(FinalClientModuleName, FinalClientSymbolsName, ClientLibHotReloadIteration);
+	std::string newClientModuleName;
+	std::string newClientSymbolsName;
+	GetModuleAndSymbolsName(newClientModuleName, newClientSymbolsName, ClientLibHotReloadIteration);
 
 	bool bCopyFailed = false;
 	// Copy .dll
-	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll", FinalClientModuleName.c_str(), FALSE))
+	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll", newClientModuleName.c_str(), FALSE))
 	{
 		// Only log if file wasn't found.
 		if (GetLastError() == ERROR_FILE_NOT_FOUND)
@@ -139,7 +139,7 @@ void ReloadClientModule(SynergyClientAPI& API)
 		bCopyFailed = true;
 	}
 	// Copy .pdb symbols.
-	else if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".pdb", FinalClientSymbolsName.c_str(), FALSE))
+	else if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".pdb", newClientSymbolsName.c_str(), FALSE))
 	{
 		// Only log if file wasn't found.
 		if (GetLastError() == ERROR_FILE_NOT_FOUND)
@@ -155,6 +155,19 @@ void ReloadClientModule(SynergyClientAPI& API)
 		return;
 	}
 
+	ClientLibHotReloadIteration++;
+
+	// Get rid of previous iteration of Hotreload
+	if (ClientLibHotReloadIteration > 1)
+	{
+		std::string previousClientModuleName;
+		std::string previousClientSymbolsName;
+		GetModuleAndSymbolsName(previousClientModuleName, previousClientSymbolsName, ClientLibHotReloadIteration);
+
+		DeleteFileA(previousClientModuleName.c_str());
+		DeleteFileA(previousClientSymbolsName.c_str());
+	}
+
 	UnloadClientModule(API);
 	LoadClientModule(API);
 
@@ -162,8 +175,6 @@ void ReloadClientModule(SynergyClientAPI& API)
 	{
 		std::cout << "Synergy Client Module loaded successfully.\n";
 		API.Hello();
-
-		ClientLibHotReloadIteration++;
 	}
 }
 
