@@ -1,0 +1,3 @@
+[submodule "Dependencies/Synergy"]
+	path = Dependencies/Synergy
+	url = https://github.com/MarcJacob/Synergy.git
