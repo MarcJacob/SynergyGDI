@@ -7,6 +7,8 @@
 #include <iostream>
 #include <shellapi.h>
 
+#include <string>
+
 #ifndef TRANSLATION_UNIT
 static_assert(0, "INC File " __FILE__ " must be included within a translation unit and NOT compiled on its own !");
 #endif
@@ -17,33 +19,57 @@ static_assert(0, "INC File " __FILE__ " must be included within a translation un
 static_assert(0, "INC File " __FILE__ " has been included twice !");
 #endif
 
-#define CLIENT_MODULE_FILENAME "SynergyClientLib.dll"
-#define CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME "SynergyClientLib.pdb"
+#define CLIENT_MODULE_FILENAME "SynergyClientLib"
+#define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\"
+/*
+	Iteration number of the client library and debug symbols being used. Gets increment on each hotreload that involves a successful copy of
+	the dll.
+*/
+uint8_t ClientLibHotReloadIteration = 0;
 
-#define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\" CLIENT_MODULE_FILENAME
-#define CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\" CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME
+void GetModuleAndSymbolsName(std::string& OutModuleName, std::string& OutSymbolsName, uint8_t HotreloadIteration)
+{
+	OutModuleName = CLIENT_MODULE_FILENAME;
+	OutSymbolsName = CLIENT_MODULE_FILENAME;
+	if (HotreloadIteration > 0)
+	{
+		OutModuleName.append("_HOTRELOAD_" + std::to_string(HotreloadIteration));
+		OutSymbolsName.append("_HOTRELOAD_" + std::to_string(HotreloadIteration));
+	}
+
+	OutModuleName.append(".dll");
+	OutSymbolsName.append(".pdb");
+}
 
 HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 {
 	APIStruct = {};
 
 	// Locate library file. Copy it to a temporary target in the working directory and load it.
-	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH, CLIENT_MODULE_FILENAME, FALSE))
+	std::string FinalClientModuleName;
+	std::string FinalClientSymbolsName;
+	GetModuleAndSymbolsName(FinalClientModuleName, FinalClientSymbolsName, ClientLibHotReloadIteration);
+
+	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll", FinalClientModuleName.c_str(), FALSE))
 	{
 		std::cerr << "ERROR: Failed to copy up to date client module from Dependencies folder. Make sure the client library has been built.\n"
-			<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH << "\n";
+			<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll" << "\n";
 	}
 	else
 	{
 		// Copy .pdb symbols.
-		if (!CopyFileA(CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH, CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME, FALSE))
+		if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".pdb", FinalClientSymbolsName.c_str(), FALSE))
 		{
 			std::cerr << "WARNING: Failed to copy up to date client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
-				<< "Searched path = " << CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH << "\n";
+				<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH  CLIENT_MODULE_FILENAME ".pdb" << "\n";
+		}
+		else
+		{
+			ClientLibHotReloadIteration++;
 		}
 	}
 
-	HMODULE clientModule = LoadLibraryA(CLIENT_MODULE_FILENAME);
+	HMODULE clientModule = LoadLibraryA(FinalClientModuleName.c_str());
 	if (clientModule == nullptr)
 	{
 		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << CLIENT_MODULE_FILENAME << "\" exists.\n";
@@ -87,8 +113,30 @@ HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 	return clientModule;
 }
 
+/*
+	Clears all hotreloaded instances of the Client .dll and .pdb files.
+*/
+void ClearHotreloadedCopies()
+{
+	for (int iteration = 1; iteration <= ClientLibHotReloadIteration; iteration++)
+	{
+		// Remove hotreloaded copies, keeping only the original one around.
+		std::string HotreloadClientModuleName;
+		std::string HotreloadClientSymbolsName;
+		GetModuleAndSymbolsName(HotreloadClientModuleName, HotreloadClientSymbolsName, iteration);
+
+		DeleteFileA(HotreloadClientModuleName.c_str());
+		DeleteFileA(HotreloadClientSymbolsName.c_str());
+	}
+}
+
 void UnloadClientModule(HMODULE ClientModule)
 {
 	FreeLibrary(ClientModule);
 	ClientModule = 0;
+
+	if (ClientLibHotReloadIteration > 0)
+	{
+		ClearHotreloadedCopies();
+	}
 }

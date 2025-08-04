@@ -142,6 +142,11 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 	else if (Keycode >= 'A' && Keycode <= 'Z')
 	{
 		key = static_cast<ActionKey>((Keycode) - 'A' + static_cast<uint8_t>(ActionKey::LETTERS_START));
+
+		if (key == ActionKey::KEY_R && !bRelease)
+		{
+			ReloadClientLibrary();
+		}
 	}
 	// Arrow keys
 	else if (Keycode >= VK_LEFT && Keycode <= VK_DOWN)
