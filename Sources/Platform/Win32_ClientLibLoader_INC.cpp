@@ -155,8 +155,6 @@ void ReloadClientModule(SynergyClientAPI& API)
 		return;
 	}
 
-	ClientLibHotReloadIteration++;
-
 	// Get rid of previous iteration of Hotreload
 	if (ClientLibHotReloadIteration > 1)
 	{
@@ -173,6 +171,9 @@ void ReloadClientModule(SynergyClientAPI& API)
 
 	if (API.APISuccessfullyLoaded())
 	{
+		// Loading this iteration was successful, increment iteration count by one.
+		ClientLibHotReloadIteration++;
+
 		std::cout << "Synergy Client Module loaded successfully.\n";
 		API.Hello();
 	}
