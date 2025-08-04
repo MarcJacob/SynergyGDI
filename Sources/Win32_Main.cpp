@@ -63,9 +63,6 @@ struct Win32AppContext
 	// Whether the program should allocate a console and output debug info to it. TODO: Make this configurable.
 	bool bUsingConsole = true;
 
-	// Synergy Client dll module
-	HMODULE ClientModule;
-
 	// Active Viewports
 	std::vector<Win32Viewport> Viewports;
 
@@ -79,24 +76,6 @@ struct Win32AppContext
 
 static Win32AppContext Win32App;
 static SynergyClientAPI ClientAPI;
-
-void ReloadClientLibrary()
-{
-	std::cout << "Loading Synergy Client Module.\n";
-
-	if (Win32App.ClientModule != 0)
-	{
-		UnloadClientModule(Win32App.ClientModule);
-	}
-
-	Win32App.ClientModule = LoadClientModule(ClientAPI);
-
-	if (Win32App.ClientModule != 0)
-	{
-		std::cout << "Synergy Client Module loaded successfully.\n";
-		ClientAPI.Hello();
-	}
-}
 
 bool ViewportIsValid(ViewportID ID)
 {
@@ -145,7 +124,7 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 
 		if (key == ActionKey::KEY_R && !bRelease)
 		{
-			ReloadClientLibrary();
+			ReloadClientModule(ClientAPI);
 		}
 	}
 	// Arrow keys
@@ -403,7 +382,11 @@ DrawCall* AllocateNewDrawCall(ViewportID TargetViewportID, DrawCallType Type)
 	return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
 }
 
-// Final program cleanup code ran when the program ends for ANY reason.
+/*
+	Final program cleanup code ran when the program ends for ANY reason.
+	When Force Shutdown is true, a lot of "heavy" or thread-sensitive cleanup operations will be skipped, the priority being to free
+	external resources, cleanup temporary files and exit before the OS timeout forces us to.
+*/
 void OnProgramEnd()
 {
 	// Deallocate client frame memory
@@ -413,7 +396,7 @@ void OnProgramEnd()
 		Win32App.ClientFrameData.FrameMemory.Memory = nullptr;
 		Win32App.ClientFrameData.FrameMemory.Size = 0;
 	}
-	
+
 	// Deallocate client persistent memory
 	if (Win32App.ClientRunningContext.PersistentMemory.Memory != nullptr)
 	{
@@ -421,12 +404,14 @@ void OnProgramEnd()
 		Win32App.ClientRunningContext.PersistentMemory.Memory = nullptr;
 		Win32App.ClientRunningContext.PersistentMemory.Size = 0;
 	}
+	
 
 	// If Client API was ever successfully loaded, unload it.
 	if (ClientAPI.APISuccessfullyLoaded())
 	{
 		ClientAPI.ShutdownClient(Win32App.ClientRunningContext);
-		UnloadClientModule(Win32App.ClientModule);
+		
+		UnloadClientModule(ClientAPI);
 	}
 
 	// Destroy remaining viewports.
@@ -454,8 +439,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	ReloadClientLibrary();
-
+	ReloadClientModule(ClientAPI);
 
 	if (!AppContextInitSuccessful())
 	{
@@ -514,6 +498,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	Win32App.bRunning = true;
 	while (Win32App.bRunning)
 	{
+		TryRefreshClientModule(ClientAPI);
+
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;

@@ -21,11 +21,22 @@ static_assert(0, "INC File " __FILE__ " has been included twice !");
 
 #define CLIENT_MODULE_FILENAME "SynergyClientLib"
 #define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\"
+
 /*
 	Iteration number of the client library and debug symbols being used. Gets increment on each hotreload that involves a successful copy of
 	the dll.
 */
 uint8_t ClientLibHotReloadIteration = 0;
+
+/*
+	Module identifier for the currently loaded Client library module, if any.
+*/
+HMODULE ClientLibModule = NULL;
+
+/*
+	Timestamp of the last Client library file that was loaded, for automatically detecting new versions.
+*/
+FILETIME LastLoadedClientLibraryFileWriteTime;
 
 void GetModuleAndSymbolsName(std::string& OutModuleName, std::string& OutSymbolsName, uint8_t HotreloadIteration)
 {
@@ -41,102 +52,141 @@ void GetModuleAndSymbolsName(std::string& OutModuleName, std::string& OutSymbols
 	OutSymbolsName.append(".pdb");
 }
 
-HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
+void LoadClientModule(SynergyClientAPI& APIStruct)
 {
 	APIStruct = {};
+
+	std::string FinalClientModuleName;
+	std::string FinalClientSymbolsName;
+	GetModuleAndSymbolsName(FinalClientModuleName, FinalClientSymbolsName, ClientLibHotReloadIteration);
+
+	ClientLibModule = LoadLibraryA(FinalClientModuleName.c_str());
+	if (ClientLibModule == nullptr)
+	{
+		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << FinalClientModuleName << "\" exists.\n";
+		return;
+	}
+
+	// Load Client API functions.
+	APIStruct = {};
+
+	APIStruct.Hello = reinterpret_cast<decltype(APIStruct.Hello)>(GetProcAddress(ClientLibModule, "Hello"));
+	if (APIStruct.Hello == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
+	}
+
+	APIStruct.StartClient = reinterpret_cast<decltype(APIStruct.StartClient)>(GetProcAddress(ClientLibModule, "StartClient"));
+	if (APIStruct.StartClient == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
+	}
+
+	APIStruct.RunClientFrame = reinterpret_cast<decltype(APIStruct.RunClientFrame)>(GetProcAddress(ClientLibModule, "RunClientFrame"));
+	if (APIStruct.RunClientFrame == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"RunClientFrame \" in Client library.\n";
+	}
+
+	APIStruct.ShutdownClient = reinterpret_cast<decltype(APIStruct.ShutdownClient)>(GetProcAddress(ClientLibModule, "ShutdownClient"));
+	if (APIStruct.ShutdownClient == nullptr)
+	{
+		std::cerr << "Error: Missing symbol \"ShutdownClient \" in Client library.\n";
+	}
+
+	if (APIStruct.APISuccessfullyLoaded())
+	{
+		// Cache the last write time of the file for automated change detection.
+		WIN32_FIND_DATAA fileFindData;
+		FindFirstFileA(FinalClientModuleName.c_str(), &fileFindData);
+
+		LastLoadedClientLibraryFileWriteTime = fileFindData.ftLastWriteTime;
+	}
+}
+
+void UnloadClientModule(SynergyClientAPI& API)
+{
+	FreeLibrary(ClientLibModule);
+	ClientLibModule = NULL;
+
+	// Assign "stub" lambdas to all API functions so they do not crash the program if called mistakenly.
+	// This can happen specifically during forced platform shutdown happening on a different thread.
+	API.Hello = []() {};
+	API.RunClientFrame = [](ClientContext& Context, ClientFrameData& FrameData) {};
+	API.StartClient = [](ClientContext& Context) {};
+	API.ShutdownClient = [](ClientContext& Context) {};
+}
+
+void ReloadClientModule(SynergyClientAPI& API)
+{
+	std::cout << "Loading Synergy Client Module.\n";
 
 	// Locate library file. Copy it to a temporary target in the working directory and load it.
 	std::string FinalClientModuleName;
 	std::string FinalClientSymbolsName;
 	GetModuleAndSymbolsName(FinalClientModuleName, FinalClientSymbolsName, ClientLibHotReloadIteration);
 
+	bool bCopyFailed = false;
+	// Copy .dll
 	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll", FinalClientModuleName.c_str(), FALSE))
 	{
-		std::cerr << "ERROR: Failed to copy up to date client module from Dependencies folder. Make sure the client library has been built.\n"
-			<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll" << "\n";
-	}
-	else
-	{
-		// Copy .pdb symbols.
-		if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".pdb", FinalClientSymbolsName.c_str(), FALSE))
+		// Only log if file wasn't found.
+		if (GetLastError() == ERROR_FILE_NOT_FOUND)
 		{
-			std::cerr << "WARNING: Failed to copy up to date client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
+			std::cerr << "ERROR: Failed to find client module from Dependencies folder. Make sure the client library has been built.\n"
+				<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll" << "\n";
+		}
+		bCopyFailed = true;
+	}
+	// Copy .pdb symbols.
+	else if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".pdb", FinalClientSymbolsName.c_str(), FALSE))
+	{
+		// Only log if file wasn't found.
+		if (GetLastError() == ERROR_FILE_NOT_FOUND)
+		{
+			std::cerr << "WARNING: Failed to find client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
 				<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH  CLIENT_MODULE_FILENAME ".pdb" << "\n";
 		}
-		else
-		{
-			ClientLibHotReloadIteration++;
-		}
+		bCopyFailed = true;
 	}
 
-	HMODULE clientModule = LoadLibraryA(FinalClientModuleName.c_str());
-	if (clientModule == nullptr)
+	if (bCopyFailed)
 	{
-		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << CLIENT_MODULE_FILENAME << "\" exists.\n";
-		return NULL;
+		return;
 	}
 
-	// Load Client API functions.
-	APIStruct = {};
+	UnloadClientModule(API);
+	LoadClientModule(API);
 
-	APIStruct.Hello = reinterpret_cast<decltype(APIStruct.Hello)>(GetProcAddress(clientModule, "Hello"));
-	if (APIStruct.Hello == nullptr)
+	if (API.APISuccessfullyLoaded())
 	{
-		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
-	}
+		std::cout << "Synergy Client Module loaded successfully.\n";
+		API.Hello();
 
-	APIStruct.StartClient = reinterpret_cast<decltype(APIStruct.StartClient)>(GetProcAddress(clientModule, "StartClient"));
-	if (APIStruct.StartClient == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
-	}
-
-	APIStruct.RunClientFrame = reinterpret_cast<decltype(APIStruct.RunClientFrame)>(GetProcAddress(clientModule, "RunClientFrame"));
-	if (APIStruct.RunClientFrame == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"RunClientFrame \" in Client library.\n";
-	}
-
-	APIStruct.ShutdownClient = reinterpret_cast<decltype(APIStruct.ShutdownClient)>(GetProcAddress(clientModule, "ShutdownClient"));
-	if (APIStruct.ShutdownClient == nullptr)
-	{
-		std::cerr << "Error: Missing symbol \"ShutdownClient \" in Client library.\n";
-	}
-
-	if (!APIStruct.APISuccessfullyLoaded())
-	{
-		std::cerr << "FAILED TO LOAD CLIENT LIBRARY.\n";
-		APIStruct = {};
-		return NULL;
-	}
-
-	return clientModule;
-}
-
-/*
-	Clears all hotreloaded instances of the Client .dll and .pdb files.
-*/
-void ClearHotreloadedCopies()
-{
-	for (int iteration = 1; iteration <= ClientLibHotReloadIteration; iteration++)
-	{
-		// Remove hotreloaded copies, keeping only the original one around.
-		std::string HotreloadClientModuleName;
-		std::string HotreloadClientSymbolsName;
-		GetModuleAndSymbolsName(HotreloadClientModuleName, HotreloadClientSymbolsName, iteration);
-
-		DeleteFileA(HotreloadClientModuleName.c_str());
-		DeleteFileA(HotreloadClientSymbolsName.c_str());
+		ClientLibHotReloadIteration++;
 	}
 }
 
-void UnloadClientModule(HMODULE ClientModule)
+void TryRefreshClientModule(SynergyClientAPI& API)
 {
-	FreeLibrary(ClientModule);
-	ClientModule = 0;
+	std::string clientModuleName;
+	std::string clientSymbolsName;
+	GetModuleAndSymbolsName(clientModuleName, clientSymbolsName, ClientLibHotReloadIteration - 1);
 
-	if (ClientLibHotReloadIteration > 0)
+	WIN32_FIND_DATAA sourceFileFindData;
+	if (FindFirstFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME ".dll", &sourceFileFindData) == INVALID_HANDLE_VALUE)
 	{
-		ClearHotreloadedCopies();
+		// Source File does not exist.
+		return;
 	}
+
+	uint64_t currentTime = *reinterpret_cast<uint64_t*>(&LastLoadedClientLibraryFileWriteTime);
+	uint64_t fileTime = *reinterpret_cast<uint64_t*>(&sourceFileFindData.ftLastWriteTime);
+
+	if (currentTime == fileTime)
+	{
+		return;
+	}
+
+	ReloadClientModule(API);
 }

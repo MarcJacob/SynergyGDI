@@ -11,8 +11,12 @@
 
 struct SynergyClientAPI;
 
-HMODULE LoadClientModule(SynergyClientAPI& APIStruct);
-void UnloadClientModule(HMODULE ClientModule);
+void LoadClientModule(SynergyClientAPI& APIStruct);
+void UnloadClientModule(SynergyClientAPI& API);
+void ReloadClientModule(SynergyClientAPI& API);
+
+// Checks if a new Client library version is available for hotreload, and if there is, do it immediately.
+void TryRefreshClientModule();
 
 struct DrawCall;
 enum class DrawCallType;
