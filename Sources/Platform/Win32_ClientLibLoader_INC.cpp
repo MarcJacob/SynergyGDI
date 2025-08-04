@@ -17,31 +17,33 @@ static_assert(0, "INC File " __FILE__ " must be included within a translation un
 static_assert(0, "INC File " __FILE__ " has been included twice !");
 #endif
 
-#define CLIENT_MODULE_FILENAME ".\\SynergyClientLib"
-#define WCLIENT_MODULE_FILENAME L".\\SynergyClientLib"
+#define CLIENT_MODULE_FILENAME "SynergyClientLib.dll"
+#define CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME "SynergyClientLib.pdb"
 
-#define LIB_RELOAD_PROGRAM_PATH L".\\RefreshDependencies.bat" // TODO Make it configurable.
+#define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\" CLIENT_MODULE_FILENAME
+#define CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\" CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME
 
 HMODULE LoadClientModule(SynergyClientAPI& APIStruct)
 {
-	// Attempt to launch Lib Reload Program.
-	SHELLEXECUTEINFO execInfo = {};
-	execInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-	execInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-	execInfo.lpVerb = L"open";
-	execInfo.lpFile = LIB_RELOAD_PROGRAM_PATH;
-
-	if (ShellExecuteEx(&execInfo))
-	{
-		// Wait for reload program to do its thing.
-		// TODO Let's use ShellExecuteEx and wait for the program to end properly. 
-		WaitForSingleObject(execInfo.hProcess, 2000);
-		CloseHandle(execInfo.hProcess);
-	}
-
 	APIStruct = {};
 
-	HMODULE clientModule = LoadLibrary(WCLIENT_MODULE_FILENAME);
+	// Locate library file. Copy it to a temporary target in the working directory and load it.
+	if (!CopyFileA(CLIENT_MODULE_SOURCE_PATH, CLIENT_MODULE_FILENAME, FALSE))
+	{
+		std::cerr << "ERROR: Failed to copy up to date client module from Dependencies folder. Make sure the client library has been built.\n"
+			<< "Searched path = " << CLIENT_MODULE_SOURCE_PATH << "\n";
+	}
+	else
+	{
+		// Copy .pdb symbols.
+		if (!CopyFileA(CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH, CLIENT_MODULE_DEBUG_SYMBOLS_FILENAME, FALSE))
+		{
+			std::cerr << "WARNING: Failed to copy up to date client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
+				<< "Searched path = " << CLIENT_MODULE_DEBUG_SYMBOLS_SOURCE_PATH << "\n";
+		}
+	}
+
+	HMODULE clientModule = LoadLibraryA(CLIENT_MODULE_FILENAME);
 	if (clientModule == nullptr)
 	{
 		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << CLIENT_MODULE_FILENAME << "\" exists.\n";
