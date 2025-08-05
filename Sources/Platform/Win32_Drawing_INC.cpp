@@ -220,28 +220,35 @@ void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_
 
 void DrawRectangle(RectangleDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
-	// TODO: Use simd ? 
-	for (int y = DrawCall.y; y < DrawCall.height + DrawCall.y; y++)
-	{
-		if (y < 0)
-		{
-			continue;
-		}
-		else if (y >= BufferHeight)
-		{
-			break;
-		}
-		for (int x = DrawCall.x; x < DrawCall.width + DrawCall.x; x++)
-		{
-			if (x < 0)
-			{
-				continue;
-			}
-			else if (x >= BufferWidth)
-			{
-				break;
-			}
+	Vector2s minCoord, maxCoord;
 
+	// Min coordinates, INCLUSIVE
+	minCoord.x = max(0, DrawCall.x);
+	minCoord.y = max(0, DrawCall.y);
+
+	if (minCoord.x >= BufferWidth || minCoord.y >= BufferHeight)
+	{
+		// Rectangle is entirely outside screen. Ignore draw call.
+		return;
+	}
+
+	// Max coordinates, EXCLUSIVE
+	maxCoord.x = min(BufferWidth, DrawCall.x + DrawCall.width);
+	maxCoord.y = min(BufferHeight, DrawCall.y + DrawCall.height);
+
+	if (maxCoord.x < 0 || maxCoord.y < 0)
+	{
+		// Rectangle is entirely outside screen. Ignore draw call.
+		return;
+	}
+
+	// Pixels are stored line by line in memory. Set the memory line by line accordingly.
+	// TODO Right now we're copying in pixel values 4 bytes by 4 bytes. Using 8 bytes or however many bytes the SIMD hardware on the machine
+	// allows would be far more efficient, in theory (in practice it's possible most compilers will already be doing this).
+	for (uint16_t y = minCoord.y; y < maxCoord.y; y++)
+	{
+		for (uint16_t x = minCoord.x; x < maxCoord.x; x++)
+		{
 			PixelBuffer[y * BufferWidth + x].full = DrawCall.color.full;
 		}
 	}
