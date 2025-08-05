@@ -124,7 +124,10 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 
 		if (key == ActionKey::KEY_R && !bRelease)
 		{
-			ReloadClientModule(ClientAPI);
+			// Force a hot reload of the client module if hot reloading is supported.
+#if HOTRELOAD_SUPPORTED
+			RunHotreloadCompileProgram();
+#endif
 		}
 	}
 	// Arrow keys
@@ -403,7 +406,6 @@ void OnProgramEnd()
 		Win32App.ClientRunningContext.PersistentMemory.Memory = nullptr;
 		Win32App.ClientRunningContext.PersistentMemory.Size = 0;
 	}
-	
 
 	// If Client API was ever successfully loaded, unload it.
 	if (ClientAPI.APISuccessfullyLoaded())
@@ -422,6 +424,8 @@ void OnProgramEnd()
 		DestroyViewport(viewport.ID);
 	}
 
+	CleanupHotreloadFiles();
+
 	if (Win32App.bUsingConsole)
 	{
 		system("pause");
@@ -439,6 +443,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	}
 
 	LoadClientModule(ClientAPI);
+
+#if HOTRELOAD_SUPPORTED
+	if (!ClientAPI.APISuccessfullyLoaded())
+	{
+		// It is likely that API failed to load because no base library is available in working directory. If hot reload is supported,
+		// attempt one now. The hot reload system knows where to go look for new library versions.
+		TryHotreloadClientModule(ClientAPI);
+	}
+#endif
 
 	if (!AppContextInitSuccessful())
 	{
@@ -497,7 +510,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	Win32App.bRunning = true;
 	while (Win32App.bRunning)
 	{
-		TryRefreshClientModule(ClientAPI);
+		// If Hot reloading is supported, attempt to hot reload on every frame. Detecting that hot reloading is not necessary or possible
+		// is relatively cheap so this should not be a performance concern.
+#if HOTRELOAD_SUPPORTED
+		TryHotreloadClientModule(ClientAPI);
+#endif
 
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{

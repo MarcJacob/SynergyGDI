@@ -9,14 +9,21 @@
 #include <cstdint>
 #include <iostream>
 
+#define HOTRELOAD_SUPPORTED 1
+
 struct SynergyClientAPI;
 
-void LoadClientModule(SynergyClientAPI& APIStruct);
+void LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride = "");
 void UnloadClientModule(SynergyClientAPI& API);
-void ReloadClientModule(SynergyClientAPI& API);
 
-// Checks if a new Client library version is available for hotreload, and if there is, do it immediately.
-void TryRefreshClientModule(SynergyClientAPI& API);
+#if HOTRELOAD_SUPPORTED
+// Checks if a new Client library version is available for hotreload, and if there is, do it immediately. Returns whether hotreload was successful.
+bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce = false);
+
+// Cleans up the current iteration of hot reloaded client module files from working directory. To be called on program exit.
+void CleanupHotreloadFiles();
+#endif
+
 
 struct DrawCall;
 enum class DrawCallType;

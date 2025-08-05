@@ -11,6 +11,8 @@ target_link_libraries(Synergy SynergyClientLib)
 if (WIN32)
 	# Specify that we want to run in UNICODE mode when building for Windows.
 	add_compile_definitions(UNICODE)
+
+	
 ENDIF()
 
 target_include_directories(Synergy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Includes/)
