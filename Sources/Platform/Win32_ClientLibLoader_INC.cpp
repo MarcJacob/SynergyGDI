@@ -115,6 +115,17 @@ void UnloadClientModule(SynergyClientAPI& API)
 	API.RunClientFrame = [](ClientContext& Context, ClientFrameData& FrameData) {};
 	API.StartClient = [](ClientContext& Context) {};
 	API.ShutdownClient = [](ClientContext& Context) {};
+
+	// If we were using a hotreloading iteration, delete it.
+	if (ClientLibHotReloadIteration >= 1)
+	{
+		std::string previousClientModuleName;
+		std::string previousClientSymbolsName;
+		GetModuleAndSymbolsName(previousClientModuleName, previousClientSymbolsName, ClientLibHotReloadIteration);
+
+		DeleteFileA(previousClientModuleName.c_str());
+		DeleteFileA(previousClientSymbolsName.c_str());
+	}
 }
 
 void ReloadClientModule(SynergyClientAPI& API)
@@ -124,7 +135,7 @@ void ReloadClientModule(SynergyClientAPI& API)
 	// Locate library file. Copy it to a temporary target in the working directory and load it.
 	std::string newClientModuleName;
 	std::string newClientSymbolsName;
-	GetModuleAndSymbolsName(newClientModuleName, newClientSymbolsName, ClientLibHotReloadIteration);
+	GetModuleAndSymbolsName(newClientModuleName, newClientSymbolsName, ClientLibHotReloadIteration + 1);
 
 	bool bCopyFailed = false;
 	// Copy .dll
@@ -155,25 +166,15 @@ void ReloadClientModule(SynergyClientAPI& API)
 		return;
 	}
 
-	// Get rid of previous iteration of Hotreload
-	if (ClientLibHotReloadIteration > 1)
-	{
-		std::string previousClientModuleName;
-		std::string previousClientSymbolsName;
-		GetModuleAndSymbolsName(previousClientModuleName, previousClientSymbolsName, ClientLibHotReloadIteration);
-
-		DeleteFileA(previousClientModuleName.c_str());
-		DeleteFileA(previousClientSymbolsName.c_str());
-	}
-
 	UnloadClientModule(API);
+
+	// Copying new iteration over was successful, increment iteration count by one.
+	ClientLibHotReloadIteration++;
+
 	LoadClientModule(API);
 
 	if (API.APISuccessfullyLoaded())
 	{
-		// Loading this iteration was successful, increment iteration count by one.
-		ClientLibHotReloadIteration++;
-
 		std::cout << "Synergy Client Module loaded successfully.\n";
 		API.Hello();
 	}

@@ -438,7 +438,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	ReloadClientModule(ClientAPI);
+	LoadClientModule(ClientAPI);
 
 	if (!AppContextInitSuccessful())
 	{
