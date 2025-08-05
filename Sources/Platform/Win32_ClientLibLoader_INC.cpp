@@ -36,9 +36,6 @@ HMODULE ClientLibModule = NULL;
 // So for now let's consider hot reloading a very particular feature that has to be setup locally. As long as I'm working alone on this using
 // the MSVC compiler I'm fine, but the second this changes we'll need to move the entire hotreload system configuration to a file or something.
 
-// Script ran on the first instance of hot reloading, setting up the necessary environment variables.
-#define HOTRELOAD_COMPILER_SETUP_SCRIPT "C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional\\VC\\Auxiliary\\Build\\vcvars64.bat"
-
 // Script ran on each hot reload compile, triggering a simplified build pipeline on client code that has to output .dll and .pdb files
 // compatible with hotreloading (IE different name per iteration).
 #define CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT "..\\Scripts\\Win32Dev\\CompileClientForHotreload.bat"
@@ -229,26 +226,6 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 
 void RunHotreloadCompileProgram()
 {
-#ifdef HOTRELOAD_COMPILER_SETUP_SCRIPT
-
-	if (!HotreloadContext.bCompileSetupScriptRan)
-	{
-		SHELLEXECUTEINFOA execInfo = {};
-		execInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-		execInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-		execInfo.lpVerb = "open";
-		execInfo.lpFile = HOTRELOAD_COMPILER_SETUP_SCRIPT;
-
-		if (ShellExecuteExA(&execInfo))
-		{
-			std::cout << "Running Hotreload Compiler setup script...\n";
-			WaitForSingleObject(execInfo.hProcess, INFINITE);
-			std::cout << "Done.\n";
-			HotreloadContext.bCompileSetupScriptRan = true;
-		}
-	}
-
-#endif
 #ifdef CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT
 	// Run Hotreload script if one is defined.
 
