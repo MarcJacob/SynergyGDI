@@ -131,6 +131,7 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 			// Force a hot reload of the client module if hot reloading is supported.
 #if HOTRELOAD_SUPPORTED
 			RunHotreloadCompileProgram();
+			TryHotreloadClientModule(ClientAPI, true);
 #endif
 		}
 		else if (key == ActionKey::KEY_L && !bRelease)
