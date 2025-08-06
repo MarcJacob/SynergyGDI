@@ -11,4 +11,5 @@
 
 Build/
 Intermediate/
-
+*.obj
+*.pdb
