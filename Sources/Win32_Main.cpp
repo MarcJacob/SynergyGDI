@@ -72,6 +72,8 @@ struct Win32AppContext
 
 	// Input buffer currently being filled in.
 	Win32ActionInputBuffer* InputBackbuffer;
+
+	Vector2s CursorCoordinates;
 };
 
 static Win32AppContext Win32App;
@@ -98,7 +100,7 @@ Win32Viewport* FindViewportFromWindowHandle(HWND windowHandle)
 }
 
 /* Builds and records an action input for the given keyboard key code and viewport, putting it in whatever buffer(s) are appropriate. */
-void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, bool bRelease)
+void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, bool bRelease)
 {
 	// Check that there is a backbuffer ready.
 	if (Win32App.InputBackbuffer == nullptr
@@ -122,12 +124,20 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 	{
 		key = static_cast<ActionKey>((Keycode) - 'A' + static_cast<uint8_t>(ActionKey::LETTERS_START));
 
+		// PLATFORM INTERACTION HOTKEYS
+		// TODO MOVE THIS TO AN EXTERNAL FUNCTION OR MAKE SOME SORT OF CALLBACK SYSTEM
 		if (key == ActionKey::KEY_R && !bRelease)
 		{
 			// Force a hot reload of the client module if hot reloading is supported.
 #if HOTRELOAD_SUPPORTED
 			RunHotreloadCompileProgram();
 #endif
+		}
+		else if (key == ActionKey::KEY_L && !bRelease)
+		{
+			// Log info about the current state of the platform.
+			std::cout << "WIN32 PLATFORM INFO:\n" <<
+				"\tMouse Coordinates: " << Win32App.CursorCoordinates.x << " | " << Win32App.CursorCoordinates.y << "\n";
 		}
 	}
 	// Arrow keys
@@ -144,10 +154,11 @@ void RecordActionInputForViewport(Win32Viewport& Viewport, uint64_t Keycode, boo
 	}
 
 	// Fill in other properties.
-	event.Key = key;
+	event.key = key;
 	event.bRelease = bRelease;
-	event.TimeNormalized = 0.f;
-	event.Viewport = Viewport.ID;
+	event.timeNormalized = 0.f;
+	event.viewport = viewport.ID;
+	event.cursorLocation = Win32App.CursorCoordinates;
 
 	// Increment number of events in the buffer.
 	Win32App.InputBackbuffer->EventCount++;
@@ -219,6 +230,53 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 		SelectObject(viewport->DrawingBitmapDC, viewport->DrawingBitmap);
 
 		break;
+
+	// MOUSE INPUT
+	case(WM_MOUSEMOVE):
+		if (viewport != nullptr)
+		{
+			// Update cursor viewport and position.
+			Win32App.CursorCoordinates.x = LOWORD(lParam);
+			Win32App.CursorCoordinates.y = HIWORD(lParam);
+		}
+		break;
+	case(WM_LBUTTONDOWN):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_LBUTTON, false);
+		}
+		break;
+	case(WM_RBUTTONDOWN):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_RBUTTON, false);
+		}
+		break;
+	case (WM_MBUTTONDOWN):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_MBUTTON, false);
+		}
+		break;
+	case(WM_LBUTTONUP):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_LBUTTON, true);
+		}
+		break;
+	case(WM_RBUTTONUP):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_RBUTTON, true);
+		}
+		break;
+	case (WM_MBUTTONUP):
+		if (viewport != nullptr)
+		{
+			RecordActionInputForViewport(*viewport, VK_MBUTTON, true);
+		}
+		break;
+	// KEYBOARD INPUT
 	case(WM_KEYDOWN):
 		if (viewport != nullptr)
 		{
@@ -512,7 +570,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	{
 		// If Hot reloading is supported, attempt to hot reload on every frame. Detecting that hot reloading is not necessary or possible
 		// is relatively cheap so this should not be a performance concern.
-#if HOTRELOAD_SUPPORTED
+		// NOTE Disabled for now because this hotreload system is trash and doesn't play well with a client library being in the working directory to start with.
+		// It will need a serious rework.
+#if 0 && HOTRELOAD_SUPPORTED
 		TryHotreloadClientModule(ClientAPI);
 #endif
 
