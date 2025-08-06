@@ -249,7 +249,7 @@ bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 {
 	// Look for a hotreload candidate file at the source path.
 	WIN32_FIND_DATAA sourceFileFindData;
-	if (FindFirstFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME_BASE "_*.dll", &sourceFileFindData) == INVALID_HANDLE_VALUE)
+	if (FindFirstFileA(CLIENT_MODULE_SOURCE_PATH CLIENT_MODULE_FILENAME_BASE "*.dll", &sourceFileFindData) == INVALID_HANDLE_VALUE)
 	{
 		// No valid lib file was found at source path.
 		return false;
