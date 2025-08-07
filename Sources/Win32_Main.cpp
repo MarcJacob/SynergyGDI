@@ -117,12 +117,12 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 	// Numbers
 	if (Keycode >= '0' && Keycode <= '9')
 	{
-		key = static_cast<ActionKey>((Keycode) - '0' + static_cast<uint8_t>(ActionKey::NUMBERS_START));
+		key = (ActionKey)((Keycode)-'0' + (uint8_t)(ActionKey::NUMBERS_START));
 	}
 	// Letters
 	else if (Keycode >= 'A' && Keycode <= 'Z')
 	{
-		key = static_cast<ActionKey>((Keycode) - 'A' + static_cast<uint8_t>(ActionKey::LETTERS_START));
+		key = (ActionKey)((Keycode)-'A' + (uint8_t)(ActionKey::LETTERS_START));
 
 		// PLATFORM INTERACTION HOTKEYS
 		// TODO MOVE THIS TO AN EXTERNAL FUNCTION OR MAKE SOME SORT OF CALLBACK SYSTEM
@@ -144,7 +144,7 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 	// Arrow keys
 	else if (Keycode >= VK_LEFT && Keycode <= VK_DOWN)
 	{
-		key = static_cast<ActionKey>((Keycode) - VK_LEFT + static_cast<uint8_t>(ActionKey::ARROW_KEYS_START));
+		key = (ActionKey)((Keycode) - VK_LEFT + (uint8_t)(ActionKey::ARROW_KEYS_START));
 	}
 	// TODO Handle all other action keys.
 
@@ -218,7 +218,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 
 		// Create Device-Independent Bitmap section and link the viewport's buffer memory to it.
 		viewport->DrawingBitmap = CreateDIBSection(viewport->Win32WindowDC, &bitmapInfo,
-			DIB_RGB_COLORS, reinterpret_cast<void**>(&viewport->PixelBuffer), NULL, NULL);
+			DIB_RGB_COLORS, (void**)(&viewport->PixelBuffer), NULL, NULL);
 
 		if (viewport->DrawingBitmap == 0 || viewport->PixelBuffer == nullptr)
 		{
@@ -362,12 +362,12 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 	Win32App.Viewports.emplace_back();
 	Win32Viewport& newViewport = Win32App.Viewports.back();
 	newViewport = {};
-	newViewport.ID = static_cast<ViewportID>(Win32App.Viewports.size()) - 1;
+	newViewport.ID = (ViewportID)(Win32App.Viewports.size()) - 1;
 	newViewport.Dimensions = Dimensions;
 
 	// Convert provided ANSI viewport name to UNICODE.
 	size_t nameLength = strlen(Name) + 1;
-	newViewport.Name = static_cast<WCHAR*>(malloc(nameLength * 2));
+	newViewport.Name = (WCHAR*)(malloc(nameLength * 2));
 
 	if (newViewport.Name != nullptr)
 	{
@@ -402,7 +402,7 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 
 	// Allocate Frame Buffer for the viewport.
 	ClientFrameDrawCallBuffer frameDrawBuffer = ClientFrameDrawCallBuffer();
-	frameDrawBuffer.Buffer = static_cast<uint8_t*>(malloc(64000));
+	frameDrawBuffer.Buffer = (uint8_t*)(malloc(64000));
 	frameDrawBuffer.BufferSize = 64000;
 
 	newViewport.ClientDrawCallBuffer = frameDrawBuffer;
@@ -523,7 +523,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	ClientContext& clientRunningContext = Win32App.ClientRunningContext;
 
 	// Start the client
-	clientRunningContext.PersistentMemory.Memory = static_cast<uint8_t*>(malloc(128000));
+	clientRunningContext.PersistentMemory.Memory = (uint8_t*)(malloc(128000));
 	clientRunningContext.PersistentMemory.Size = 128000;
 
 	clientRunningContext.Platform.AllocateViewport = AllocateViewport;
@@ -535,7 +535,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	ClientFrameData& frameData = Win32App.ClientFrameData;
 	{
-		frameData.FrameMemory.Memory = static_cast<uint8_t*>(malloc(32000));
+		frameData.FrameMemory.Memory = (uint8_t*)(malloc(32000));
 		frameData.FrameMemory.Size = 32000;
 		frameData.FrameNumber = 0;
 		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
@@ -548,12 +548,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	// Input buffers
 	Win32ActionInputBuffer inputBuffers[2];
-	inputBuffers[0].Buffer = static_cast<ActionInputEvent*>(malloc(sizeof(ActionInputEvent) * 64));
+	inputBuffers[0].Buffer = (ActionInputEvent*)(malloc(sizeof(ActionInputEvent) * 64));
 	memset(inputBuffers[0].Buffer, 0, sizeof(ActionInputEvent) * 64);
 	inputBuffers[0].EventCount = 0;
 	inputBuffers[0].MaxEventCount = 64;
 
-	inputBuffers[1].Buffer = static_cast<ActionInputEvent*>(malloc(sizeof(ActionInputEvent) * 64));
+	inputBuffers[1].Buffer = (ActionInputEvent*)(malloc(sizeof(ActionInputEvent) * 64));
 	memset(inputBuffers[1].Buffer, 0, sizeof(ActionInputEvent) * 64);
 	inputBuffers[1].EventCount = 0;
 	inputBuffers[1].MaxEventCount = 64;

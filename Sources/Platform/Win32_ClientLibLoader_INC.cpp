@@ -98,25 +98,25 @@ void LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride)
 	// Load Client API functions.
 	APIStruct = {};
 
-	APIStruct.Hello = reinterpret_cast<decltype(APIStruct.Hello)>(GetProcAddress(ClientLibModule, "Hello"));
+	APIStruct.Hello = decltype(APIStruct.Hello)(GetProcAddress(ClientLibModule, "Hello"));
 	if (APIStruct.Hello == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"Hello\" in Client library.\n";
 	}
 
-	APIStruct.StartClient = reinterpret_cast<decltype(APIStruct.StartClient)>(GetProcAddress(ClientLibModule, "StartClient"));
+	APIStruct.StartClient = decltype(APIStruct.StartClient)(GetProcAddress(ClientLibModule, "StartClient"));
 	if (APIStruct.StartClient == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"CreateClientContext\" in Client library.\n";
 	}
 
-	APIStruct.RunClientFrame = reinterpret_cast<decltype(APIStruct.RunClientFrame)>(GetProcAddress(ClientLibModule, "RunClientFrame"));
+	APIStruct.RunClientFrame = decltype(APIStruct.RunClientFrame)(GetProcAddress(ClientLibModule, "RunClientFrame"));
 	if (APIStruct.RunClientFrame == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"RunClientFrame \" in Client library.\n";
 	}
 
-	APIStruct.ShutdownClient = reinterpret_cast<decltype(APIStruct.ShutdownClient)>(GetProcAddress(ClientLibModule, "ShutdownClient"));
+	APIStruct.ShutdownClient = decltype(APIStruct.ShutdownClient)(GetProcAddress(ClientLibModule, "ShutdownClient"));
 	if (APIStruct.ShutdownClient == nullptr)
 	{
 		std::cerr << "Error: Missing symbol \"ShutdownClient \" in Client library.\n";
@@ -255,8 +255,8 @@ bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 		return false;
 	}
 
-	uint64_t currentTime = *reinterpret_cast<uint64_t*>(&HotreloadContext.LastLoadedClientLibraryFileWriteTime);
-	uint64_t fileTime = *reinterpret_cast<uint64_t*>(&sourceFileFindData.ftLastWriteTime);
+	uint64_t currentTime = *(uint64_t*)(&HotreloadContext.LastLoadedClientLibraryFileWriteTime);
+	uint64_t fileTime = *(uint64_t*)(&sourceFileFindData.ftLastWriteTime);
 
 	if (!bForce 
 		&& (!CompareFileTime(&HotreloadContext.LastLoadedClientLibraryFileWriteTime, &sourceFileFindData.ftLastWriteTime) 

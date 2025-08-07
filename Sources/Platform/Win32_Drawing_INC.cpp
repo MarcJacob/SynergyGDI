@@ -61,13 +61,13 @@ DrawCall* ClientFrameDrawCallBuffer::NewDrawCall(DrawCallType Type)
 
 	if (requiredSize > BufferSize - CursorPosition)
 	{
-		std::cerr << "ERROR: Out of memory in draw call buffer. Attempted to create draw call of type " << static_cast<uint16_t>(Type)
+		std::cerr << "ERROR: Out of memory in draw call buffer. Attempted to create draw call of type " << (uint16_t)(Type)
 			<< " with only " << BufferSize - CursorPosition << " bytes available.\n";
 		return nullptr;
 	}
 
 	// Advance cursor by the required number of bytes and return the address where we can build the draw call.
-	DrawCall* address = reinterpret_cast<DrawCall*>(Buffer + CursorPosition);
+	DrawCall* address = (DrawCall*)(Buffer + CursorPosition);
 	address->type = Type;
 
 	CursorPosition += requiredSize;
@@ -86,7 +86,7 @@ bool ClientFrameDrawCallBuffer::BeginRead()
 		return false;
 	}
 
-	if (reinterpret_cast<DrawCall*>(Buffer)[0].type >= DrawCallType::INVALID)
+	if (((DrawCall*)(Buffer))[0].type >= DrawCallType::INVALID)
 	{
 		std::cerr << "ERROR: Attempted to start reading a draw call buffer from faulty memory.\n";
 		return false;
@@ -102,7 +102,7 @@ DrawCall* ClientFrameDrawCallBuffer::GetNext()
 	// Make sure that there is enough room left in the buffer to hold the relevant extended data structure.
 	// Then, return the DrawCall structure.
 
-	DrawCall* nextCall = reinterpret_cast<DrawCall*>(Buffer + CursorPosition);
+	DrawCall* nextCall = (DrawCall*)(Buffer + CursorPosition);
 	if (CursorPosition == BufferSize || nextCall->type == DrawCallType::EMPTY)
 	{
 		// End of buffer reached.
@@ -114,13 +114,13 @@ DrawCall* ClientFrameDrawCallBuffer::GetNext()
 	if (actualDrawCallSize == 0)
 	{
 		// Unrecognized type value which has no defined size, probably due to buffer corruption.
-		std::cerr << "ERROR: Unrecognized draw call type value" << static_cast<uint8_t>(nextCall->type) << "which has no defined size, probably due to buffer corruption.\n";
+		std::cerr << "ERROR: Unrecognized draw call type value" << (uint8_t)(nextCall->type) << "which has no defined size, probably due to buffer corruption.\n";
 		return nullptr;
 	}
 
 	if (BufferSize - CursorPosition < actualDrawCallSize)
 	{
-		std::cerr << "ERROR: Inconsistent draw call buffer size. Check that is was populated correctly. Read draw call of type " << static_cast<uint16_t>(nextCall->type)
+		std::cerr << "ERROR: Inconsistent draw call buffer size. Check that is was populated correctly. Read draw call of type " << (uint16_t)(nextCall->type)
 			<< " with only " << BufferSize - CursorPosition << " bytes available.\n";
 		return nullptr;
 	}
@@ -139,8 +139,8 @@ void ClearPixelBuffer(PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint1
 void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
 	float vecX, vecY;
-	vecX = static_cast<float>(DrawCall.destX - DrawCall.x);
-	vecY = static_cast<float>(DrawCall.destY - DrawCall.y);
+	vecX = (float)(DrawCall.destX - DrawCall.x);
+	vecY = (float)(DrawCall.destY - DrawCall.y);
 
 	// Track iteration count separately as it needs to stay a positive, relative number in all cases.
 	int it = -1;
@@ -167,7 +167,7 @@ void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_
 			}
 
 			// Compute final coordinates of pixel to be colored.
-			uint16_t finalY = static_cast<uint16_t>(DrawCall.y + yIncrement * it);
+			uint16_t finalY = (uint16_t)(DrawCall.y + yIncrement * it);
 			if (finalY < 0 || finalY >= BufferHeight)
 			{
 				continue;
@@ -203,7 +203,7 @@ void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_
 			}
 
 			// Compute final coordinates of pixel to be colored.
-			uint16_t finalX = static_cast<uint16_t>(DrawCall.x + xIncrement * it);
+			uint16_t finalX = (uint16_t)(DrawCall.x + xIncrement * it);
 			if (finalX < 0 || finalX >= BufferHeight)
 			{
 				continue;
@@ -256,9 +256,9 @@ void DrawRectangle(RectangleDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffe
 
 void ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
-	LineDrawCallData& line = static_cast<LineDrawCallData&>(Call);
-	RectangleDrawCallData& rect = static_cast<RectangleDrawCallData&>(Call);
-	EllipseDrawCallData& ellipse = static_cast<EllipseDrawCallData&>(Call);
+	LineDrawCallData& line = (LineDrawCallData&)(Call);
+	RectangleDrawCallData& rect = (RectangleDrawCallData&)(Call);
+	EllipseDrawCallData& ellipse = (EllipseDrawCallData&)(Call);
 	switch (Call.type)
 	{
 	case(DrawCallType::LINE):
@@ -270,7 +270,7 @@ void ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t Buf
 	case(DrawCallType::ELLIPSE):
 		break;
 	default:
-		std::cerr << "WARNING: Unsupported Client Draw Call type " << static_cast<uint16_t>(Call.type) << " ! Ignoring...\n";
+		std::cerr << "WARNING: Unsupported Client Draw Call type " << (uint16_t)(Call.type) << " ! Ignoring...\n";
 		break;
 	}
 }
