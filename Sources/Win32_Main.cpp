@@ -36,14 +36,15 @@ struct Win32Viewport
 	HDC DrawingBitmapDC;
 
 	// Render Pixel data
-	PixelRGBA* PixelBuffer;
+	Win32PixelRGBA* PixelBuffer;
 	uint16_t PixelBufferWidth;
 	uint16_t PixelBufferHeight;
 
 	// Draw Call buffer, filled in via client requests.
-	ClientFrameDrawCallBuffer ClientDrawCallBuffer;
+	Win32DrawCallBuffer ClientDrawCallBuffer;
 };
 
+// Buffer for holding Action inputs recorded by the Win32 platform.
 struct Win32ActionInputBuffer
 {
 	ActionInputEvent* Buffer;
@@ -60,9 +61,6 @@ struct Win32AppContext
 	// Whether the app is actively running client frames.
 	bool bRunning = false;
 
-	// Whether the program should allocate a console and output debug info to it. TODO: Make this configurable.
-	bool bUsingConsole = true;
-
 	// Active Viewports
 	std::vector<Win32Viewport> Viewports;
 
@@ -76,8 +74,11 @@ struct Win32AppContext
 	Vector2s CursorCoordinates;
 };
 
+// Main Win32 Static Application Context.
 static Win32AppContext Win32App;
-static SynergyClientAPI ClientAPI;
+
+// Main instance of loaded symbols from the Client dynamic library.
+static SynergyClientAPI Win32ClientAPI;
 
 bool ViewportIsValid(ViewportID ID)
 {
@@ -131,7 +132,7 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 			// Force a hot reload of the client module if hot reloading is supported.
 #if HOTRELOAD_SUPPORTED
 			RunHotreloadCompileProgram();
-			TryHotreloadClientModule(ClientAPI, true);
+			Win32_TryHotreloadClientModule(Win32ClientAPI, true);
 #endif
 		}
 		else if (key == ActionKey::KEY_L && !bRelease)
@@ -173,8 +174,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 	switch (messageType)
 	{
 	case(WM_CLOSE):
-		// Close the whole app on closing any viewport window. TODO don't do this if the viewport was destroyed from a client request,
-		// or consider making it configurable per viewport.
+		// Close the whole app on closing any viewport window.
 		Win32App.bRunning = false;
 		break;
 	case(WM_SIZE):
@@ -401,7 +401,7 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 	newViewport.Win32WindowDC = GetDC(newViewport.Win32WindowHandle);
 
 	// Allocate Frame Buffer for the viewport.
-	ClientFrameDrawCallBuffer frameDrawBuffer = ClientFrameDrawCallBuffer();
+	Win32DrawCallBuffer frameDrawBuffer = Win32DrawCallBuffer();
 	frameDrawBuffer.Buffer = (uint8_t*)(malloc(64000));
 	frameDrawBuffer.BufferSize = 64000;
 
@@ -434,7 +434,7 @@ void CloseConsole()
 // Runs necessary post-init checks to ensure initialization was successful and the app is in a state where it can run.
 bool AppContextInitSuccessful()
 {
-	return ClientAPI.APISuccessfullyLoaded();
+	return Win32ClientAPI.APISuccessfullyLoaded();
 }
 
 // Redirector function that uses the current frame draw buffer in the platform context.
@@ -467,11 +467,11 @@ void OnProgramEnd()
 	}
 
 	// If Client API was ever successfully loaded, unload it.
-	if (ClientAPI.APISuccessfullyLoaded())
+	if (Win32ClientAPI.APISuccessfullyLoaded())
 	{
-		ClientAPI.ShutdownClient(Win32App.ClientRunningContext);
+		Win32ClientAPI.ShutdownClient(Win32App.ClientRunningContext);
 		
-		UnloadClientModule(ClientAPI);
+		Win32_UnloadClientModule(Win32ClientAPI);
 	}
 
 	// Destroy remaining viewports.
@@ -483,9 +483,9 @@ void OnProgramEnd()
 		DestroyViewport(viewport.ID);
 	}
 
-	CleanupHotreloadFiles();
+	Win32_CleanupHotreloadFiles();
 
-	if (Win32App.bUsingConsole)
+	if (DEBUG_CONSOLE)
 	{
 		system("pause");
 		CloseConsole();
@@ -496,19 +496,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 {
 	Win32App.ProgramInstance = hInstance;
 
-	if (Win32App.bUsingConsole)
+	if (DEBUG_CONSOLE)
 	{
 		CreateConsole();
 	}
 
-	LoadClientModule(ClientAPI);
+	Win32_LoadClientModule(Win32ClientAPI);
 
 #if HOTRELOAD_SUPPORTED
-	if (!ClientAPI.APISuccessfullyLoaded())
+	if (!Win32ClientAPI.APISuccessfullyLoaded())
 	{
 		// It is likely that API failed to load because no base library is available in working directory. If hot reload is supported,
 		// attempt one now. The hot reload system knows where to go look for new library versions.
-		TryHotreloadClientModule(ClientAPI);
+		Win32_TryHotreloadClientModule(Win32ClientAPI);
 	}
 #endif
 
@@ -529,18 +529,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	clientRunningContext.Platform.AllocateViewport = AllocateViewport;
 	clientRunningContext.Platform.DestroyViewport = DestroyViewport;
 
-	ClientAPI.StartClient(clientRunningContext);
+	Win32ClientAPI.StartClient(clientRunningContext);
 
-	// Frame data
+	// Frame data initialization
 
 	ClientFrameData& frameData = Win32App.ClientFrameData;
 	{
 		frameData.FrameMemory.Memory = (uint8_t*)(malloc(32000));
 		frameData.FrameMemory.Size = 32000;
 		frameData.FrameNumber = 0;
-		frameData.FrameTime = 0.016f; // TODO: Actual time tracking. Right now we're assuming we'll be running at 60FPS.
-		// It would also be possible to artificially pad frames with sleep time to reach that target before anything heavy actually happens
-		// in this software.
+		frameData.FrameTime = CLIENT_FRAME_TIME;
 	
 		// Assign Frame System Calls
 		frameData.NewDrawCall = AllocateNewDrawCall;
@@ -569,14 +567,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	Win32App.bRunning = true;
 	while (Win32App.bRunning)
 	{
-		// If Hot reloading is supported, attempt to hot reload on every frame. Detecting that hot reloading is not necessary or possible
-		// is relatively cheap so this should not be a performance concern.
-		// NOTE Disabled for now because this hotreload system is trash and doesn't play well with a client library being in the working directory to start with.
-		// It will need a serious rework.
-#if 0 && HOTRELOAD_SUPPORTED
-		TryHotreloadClientModule(ClientAPI);
-#endif
-
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;
@@ -633,7 +623,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		}
 
 		// Run Client Frame
-		ClientAPI.RunClientFrame(clientRunningContext, frameData);
+		Win32ClientAPI.RunClientFrame(clientRunningContext, frameData);
 
 		// Drawing pass - rasterize all incoming draw calls after clearing the screen to black.
 
@@ -644,7 +634,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			Win32Viewport& viewport = Win32App.Viewports[viewportID];
 			
 			// Clear screen to blue.
-			ClearPixelBuffer(0xFF000000, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
+			Win32_ClearPixelBuffer(0xFF000000, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
 			
 			if (!viewport.ClientDrawCallBuffer.BeginRead())
 			{
@@ -655,7 +645,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			DrawCall* nextDrawCall = nullptr;
 			while ((nextDrawCall = Win32App.Viewports[viewportID].ClientDrawCallBuffer.GetNext()) != nullptr)
 			{
-				ProcessDrawCall(*nextDrawCall, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
+				Win32_ProcessDrawCall(*nextDrawCall, viewport.PixelBuffer, viewport.PixelBufferWidth, viewport.PixelBufferHeight);
 			}
 		}
 
@@ -667,8 +657,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			
 			BitBlt(viewport.Win32WindowDC, 0, 0, viewport.PixelBufferWidth, viewport.PixelBufferHeight, viewport.DrawingBitmapDC, 0, 0, SRCCOPY);
 		}
-
-		// TODO Handle incoming WAV audio samples.
 	}
 
 	OnProgramEnd();

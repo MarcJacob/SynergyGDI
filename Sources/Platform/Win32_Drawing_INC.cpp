@@ -13,31 +13,12 @@ static_assert(0, "INC File " __FILE__ " must be included within a translation un
 static_assert(0, "INC File " __FILE__ " has been included twice !");
 #endif
 
-/*
-	Returns the expected actual size of a draw call data structure.
-	Returns 0 if the call is invalid for any reason.
-*/
-inline size_t GetDrawCallSize(DrawCallType CallType)
+bool Win32DrawCallBuffer::BeginWrite()
 {
-	switch (CallType)
-	{
-	case(DrawCallType::LINE):
-		return sizeof(LineDrawCallData);
-	case(DrawCallType::RECTANGLE):
-		return sizeof(RectangleDrawCallData);
-	case(DrawCallType::ELLIPSE):
-		return sizeof(EllipseDrawCallData);
-	case(DrawCallType::BITMAP):
-		return sizeof(BitmapDrawCallData);
-	default:
-		return 0;
-	}
-}
-
-bool ClientFrameDrawCallBuffer::BeginWrite()
-{
-	// Reset Cursor position to 0 and zero out buffer memory. Output warning message if buffer is too small.
-	// Output error if buffer is not valid.
+	/* 
+		Reset Cursor position to 0 and zero out buffer memory.Output warning message if buffer is too small.
+		Output error if buffer is not valid.
+	*/
 
 	if (Buffer == nullptr)
 	{
@@ -55,7 +36,7 @@ bool ClientFrameDrawCallBuffer::BeginWrite()
 	return true;
 }
 
-DrawCall* ClientFrameDrawCallBuffer::NewDrawCall(DrawCallType Type)
+DrawCall* Win32DrawCallBuffer::NewDrawCall(DrawCallType Type)
 {
 	size_t requiredSize = GetDrawCallSize(Type);
 
@@ -74,18 +55,21 @@ DrawCall* ClientFrameDrawCallBuffer::NewDrawCall(DrawCallType Type)
 	return address;
 }
 
-bool ClientFrameDrawCallBuffer::BeginRead()
+bool Win32DrawCallBuffer::BeginRead()
 {
 	// Reset Cursor Position to 0. Run safety checks on the buffer and check that the first draw call's type is a valid value.
 	if (Buffer == nullptr || BufferSize < sizeof(DrawCall))
 	{
-		// Here both the buffer itself being null or it being too small are considered fatal errors, 
-		// as the buffer should have been discarded during the writing stage in either of those cases.
+		/* 
+			Here both the buffer itself being null or it being too small are considered fatal errors,
+			as the buffer should have been discarded during the writing stage in either of those cases.
+		*/
 		std::cerr << "FATAL ERROR: Attempted to start reading a draw call buffer without an actual buffer being provided, or one that is too small !\n"
 			<< "Please make sure the buffer is discarded during the writing stage.\n";
 		return false;
 	}
 
+	// Naive check that should catch most "trash" buffers or wrong start positions in memory.
 	if (((DrawCall*)(Buffer))[0].type >= DrawCallType::INVALID)
 	{
 		std::cerr << "ERROR: Attempted to start reading a draw call buffer from faulty memory.\n";
@@ -96,11 +80,13 @@ bool ClientFrameDrawCallBuffer::BeginRead()
 	return true;
 }
 
-DrawCall* ClientFrameDrawCallBuffer::GetNext()
+DrawCall* Win32DrawCallBuffer::GetNext()
 {
-	// Interpret Cursor Position as current reading position. Read first bytes as DrawCall structure and inspect type.
-	// Make sure that there is enough room left in the buffer to hold the relevant extended data structure.
-	// Then, return the DrawCall structure.
+	/*
+		Interpret Cursor Position as current reading position.Read first bytes as DrawCall structure and inspect type.
+		Make sure that there is enough room left in the buffer to hold the relevant extended data structure.
+		Then, return the DrawCall structure.
+	*/
 
 	DrawCall* nextCall = (DrawCall*)(Buffer + CursorPosition);
 	if (CursorPosition == BufferSize || nextCall->type == DrawCallType::EMPTY)
@@ -120,62 +106,64 @@ DrawCall* ClientFrameDrawCallBuffer::GetNext()
 
 	if (BufferSize - CursorPosition < actualDrawCallSize)
 	{
+		// There isn't enough data left to hold the last draw call given the type it's supposed to be, which means the buffer was inconsistently populated.
 		std::cerr << "ERROR: Inconsistent draw call buffer size. Check that is was populated correctly. Read draw call of type " << (uint16_t)(nextCall->type)
 			<< " with only " << BufferSize - CursorPosition << " bytes available.\n";
 		return nullptr;
 	}
 
-	// Is it now guaranteed that the drawcall exists and has enough memory "ahead" of it to initialize its full data structure.
-	// Advance the cursor and return a pointer to the call we just read.
+	/* 
+		Is it now guaranteed that the drawcall exists and has enough memory "ahead" of it to initialize its full data structure.
+		Advance the cursor and return a pointer to the call we just read.
+	*/
 	CursorPosition += actualDrawCallSize;
 	return nextCall;
 }
 
-void ClearPixelBuffer(PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
+void Win32_ClearPixelBuffer(Win32PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
-	memset(PixelBuffer, PixelColor.full, BufferWidth * BufferHeight * sizeof(PixelRGBA));
+	memset(PixelBuffer, PixelColor.full, BufferWidth * BufferHeight * sizeof(Win32PixelRGBA));
 }
 
-void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
+void DrawLine(LineDrawCallData& LineDrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
-	float vecX, vecY;
-	vecX = (float)(DrawCall.destX - DrawCall.x);
-	vecY = (float)(DrawCall.destY - DrawCall.y);
+	Vector2f lineVec;
+	lineVec = (LineDrawCall.destination - LineDrawCall.origin);
 
 	// Track iteration count separately as it needs to stay a positive, relative number in all cases.
 	int it = -1;
 
-	if (abs(vecX) > abs(vecY))
+	if (abs(lineVec.x) > abs(lineVec.y))
 	{
-		float yIncrement = vecY / abs(vecX);
-		for (int x = DrawCall.x;; vecX > 0 ? x++ : x--)
+		float yIncrement = lineVec.y / abs(lineVec.x);
+		for (int x = LineDrawCall.origin.x;; lineVec.x > 0 ? x++ : x--)
 		{
 			it++;
 			if (x < 0)
 			{
-				if (vecX > 0)
+				if (lineVec.x > 0)
 					continue;
 				else
 					break;
 			}
 			else if (x >= BufferWidth)
 			{
-				if (vecX < 0)
+				if (lineVec.x < 0)
 					continue;
 				else
 					break;
 			}
 
 			// Compute final coordinates of pixel to be colored.
-			uint16_t finalY = (uint16_t)(DrawCall.y + yIncrement * it);
+			uint16_t finalY = (uint16_t)(LineDrawCall.origin.y + yIncrement * it);
 			if (finalY < 0 || finalY >= BufferHeight)
 			{
 				continue;
 			}
 
-			PixelBuffer[finalY * BufferWidth + x].full = DrawCall.color.full;
+			PixelBuffer[finalY * BufferWidth + x].full = LineDrawCall.color.full;
 
-			if (x == DrawCall.destX)
+			if (x == LineDrawCall.destination.x)
 			{
 				break;
 			}
@@ -183,34 +171,34 @@ void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_
 	}
 	else
 	{
-		float xIncrement = vecX / abs(vecY);
-		for (int y = DrawCall.y;; vecY > 0 ? y++ : y--)
+		float xIncrement = lineVec.x / abs(lineVec.y);
+		for (int y = LineDrawCall.origin.y;; lineVec.y > 0 ? y++ : y--)
 		{
 			it++;
 			if (y < 0)
 			{
-				if (vecY > 0)
+				if (lineVec.y > 0)
 					continue;
 				else
 					break;
 			}
 			else if (y >= BufferHeight)
 			{
-				if (vecY < 0)
+				if (lineVec.y < 0)
 					continue;
 				else
 					break;
 			}
 
 			// Compute final coordinates of pixel to be colored.
-			uint16_t finalX = (uint16_t)(DrawCall.x + xIncrement * it);
+			uint16_t finalX = (uint16_t)(LineDrawCall.origin.x + xIncrement * it);
 			if (finalX < 0 || finalX >= BufferHeight)
 			{
 				continue;
 			}
-			PixelBuffer[y * BufferWidth + finalX].full = DrawCall.color.full;
+			PixelBuffer[y * BufferWidth + finalX].full = LineDrawCall.color.full;
 
-			if (y == DrawCall.destY)
+			if (y == LineDrawCall.destination.y)
 			{
 				break;
 			}
@@ -218,13 +206,13 @@ void DrawLine(LineDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_
 	}
 }
 
-void DrawRectangle(RectangleDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
+void DrawRectangle(RectangleDrawCallData& RectDrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
 	Vector2s minCoord, maxCoord;
 
 	// Min coordinates, INCLUSIVE
-	minCoord.x = max(0, DrawCall.x);
-	minCoord.y = max(0, DrawCall.y);
+	minCoord.x = max(0, RectDrawCall.origin.x);
+	minCoord.y = max(0, RectDrawCall.origin.y);
 
 	if (minCoord.x >= BufferWidth || minCoord.y >= BufferHeight)
 	{
@@ -233,8 +221,8 @@ void DrawRectangle(RectangleDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffe
 	}
 
 	// Max coordinates, EXCLUSIVE
-	maxCoord.x = min(BufferWidth, DrawCall.x + DrawCall.width);
-	maxCoord.y = min(BufferHeight, DrawCall.y + DrawCall.height);
+	maxCoord.x = min(BufferWidth, RectDrawCall.origin.x + RectDrawCall.dimensions.x);
+	maxCoord.y = min(BufferHeight, RectDrawCall.origin.y + RectDrawCall.dimensions.y);
 
 	if (maxCoord.x < 0 || maxCoord.y < 0)
 	{
@@ -243,18 +231,16 @@ void DrawRectangle(RectangleDrawCallData& DrawCall, Win32PixelBuffer& PixelBuffe
 	}
 
 	// Pixels are stored line by line in memory. Set the memory line by line accordingly.
-	// TODO Right now we're copying in pixel values 4 bytes by 4 bytes. Using 8 bytes or however many bytes the SIMD hardware on the machine
-	// allows would be far more efficient, in theory (in practice it's possible most compilers will already be doing this).
 	for (uint16_t y = minCoord.y; y < maxCoord.y; y++)
 	{
 		for (uint16_t x = minCoord.x; x < maxCoord.x; x++)
 		{
-			PixelBuffer[y * BufferWidth + x].full = DrawCall.color.full;
+			PixelBuffer[y * BufferWidth + x].full = RectDrawCall.color.full;
 		}
 	}
 }
 
-void ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
+void Win32_ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
 	LineDrawCallData& line = (LineDrawCallData&)(Call);
 	RectangleDrawCallData& rect = (RectangleDrawCallData&)(Call);

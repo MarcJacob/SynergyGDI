@@ -9,28 +9,43 @@
 #include <cstdint>
 #include <iostream>
 
+// WIN32 PLATFORM LAYER COMPILATION FLAGS
+
+#define DEBUG_CONSOLE 1
+
 #define HOTRELOAD_SUPPORTED 1
+
+#define CLIENT_FRAMES_PER_SECOND (60)
+#define CLIENT_FRAME_TIME (1.f / CLIENT_FRAMES_PER_SECOND)
+
+
+// --------------------------------------
+
+// CLIENT LOADING & API
 
 struct SynergyClientAPI;
 
-void LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride = "");
-void UnloadClientModule(SynergyClientAPI& API);
+void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride = "");
+void Win32_UnloadClientModule(SynergyClientAPI& API);
 
 #if HOTRELOAD_SUPPORTED
 // Checks if a new Client library version is available for hotreload, and if there is, do it immediately. Returns whether hotreload was successful.
-bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce = false);
+bool Win32_TryHotreloadClientModule(SynergyClientAPI& API, bool bForce = false);
 
-// Cleans up the current iteration of hot reloaded client module files from working directory. To be called on program exit.
-void CleanupHotreloadFiles();
+// Cleans up the current iteration of hot reloaded client module files from working directory.
+void Win32_CleanupHotreloadFiles();
 #endif
 
+// -----------------------------
+
+// PLATFORM DRAWING
 
 struct DrawCall;
 enum class DrawCallType;
 
-union PixelRGBA
+union Win32PixelRGBA
 {
-	PixelRGBA(uint32_t bytes): full(bytes) {}
+	Win32PixelRGBA(uint32_t bytes): full(bytes) {}
 
 	struct
 	{
@@ -40,19 +55,16 @@ union PixelRGBA
 	uint32_t full;
 };
 
-typedef PixelRGBA* Win32PixelBuffer;
+typedef Win32PixelRGBA* Win32PixelBuffer;
 
-void ClearPixelBuffer(PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight);
+void Win32_ClearPixelBuffer(Win32PixelRGBA PixelColor, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight);
 
-void ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight);
+void Win32_ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight);
 
 /*
 	Contains all draw calls emitted by the client over a single frame.
-	TODO IMPORTANT This needs to be overhauled into a system that puts more power into the platform's hands when it comes to creating and managing draw calls.
-	The platform should probably supply functions to create draw calls, and then manage them however it pleases. That way fewer symbols need to be exported or
-	defined in header directly.
 */
-struct ClientFrameDrawCallBuffer
+struct Win32DrawCallBuffer
 {
 	/*
 		To be called before writing into the buffer. Zeroes out the buffer and puts the buffer object into a writeable state.
@@ -91,5 +103,4 @@ struct ClientFrameDrawCallBuffer
 	size_t CursorPosition = 0;
 };
 
-
-#endif
+#endif // WIN32_PLATFORM_INCLUDED

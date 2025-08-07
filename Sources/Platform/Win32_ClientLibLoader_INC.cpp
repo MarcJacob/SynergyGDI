@@ -29,7 +29,7 @@ HMODULE ClientLibModule = NULL;
 
 #if HOTRELOAD_SUPPORTED
 
-// TODO This whole hotreload system is a little garbage because it's so compiler-specific and goes around the entire build system,
+// NOTE(MJ) This whole hotreload system is a little garbage because it's so compiler-specific and goes around the entire build system,
 // but I just couldn't find a convenient way to have CMake do something that would work with hotreloading under the constraint that .pdb
 // files don't get unloaded when their associated library does...
 //
@@ -50,15 +50,24 @@ HMODULE ClientLibModule = NULL;
 uint8_t ClientLibHotReloadIteration = 0;
 
 // Context properties of the Hot Reloadsystem.
-struct HotreloadSystemContext
+struct Win32HotreloadSystemContext
 {
-	// Full filename of the hotreloaded library and its symbols as they were copied into working directory. 
-	// Used to clean it up on program shutdown or hotreloading.
+	/* 
+		Full filename of the hotreloaded library as it was copied into working directory.
+		Used to clean it up on program shutdown or hotreloading.
+	*/
 	std::string LibFilename = "";
+	
+	/*
+		Full filename of the hotreloaded library symbols as they were copied into working directory.
+		Used to clean it up on program shutdown or hotreloading.
+	*/
 	std::string SymbolsFilename = "";
 
-	// Whether the currently loaded library is a Base library or Hotreloaded. Hotreloaded libraries are dynamically copied from source
-	// and need to be cleaned up.
+	/*
+		Whether the currently loaded library is a Base library or Hotreloaded.Hotreloaded libraries are dynamically copied from source
+		and need to be cleaned up.
+	*/
 	bool bIsHotreloaded = false;
 
 	/*
@@ -72,11 +81,11 @@ struct HotreloadSystemContext
 	bool bCompileSetupScriptRan = false;
 };
 
-HotreloadSystemContext HotreloadContext;
+static Win32HotreloadSystemContext Win32HotreloadContext;
 
 #endif
 
-void LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride)
+void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride)
 {
 	APIStruct = {};
 
@@ -128,13 +137,16 @@ void LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOverride)
 	}
 }
 
-void UnloadClientModule(SynergyClientAPI& API)
+void Win32_UnloadClientModule(SynergyClientAPI& API)
 {
 	FreeLibrary(ClientLibModule);
 	ClientLibModule = NULL;
 
-	// Assign "stub" lambdas to all API functions so they do not crash the program if called mistakenly.
-	// This can happen specifically during forced platform shutdown happening on a different thread.
+	/*
+		Assign "stub" lambdas to all API functions so they do not crash the program if called mistakenly.
+		This can happen specifically during forced platform shutdown happening on a different thread.
+	*/
+
 	API.Hello = []() {};
 	API.RunClientFrame = [](ClientContext& Context, ClientFrameData& FrameData) {};
 	API.StartClient = [](ClientContext& Context) {};
@@ -143,10 +155,10 @@ void UnloadClientModule(SynergyClientAPI& API)
 
 #if HOTRELOAD_SUPPORTED
 
-void CleanupHotreloadFiles()
+void Win32_CleanupHotreloadFiles()
 {
-	DeleteFileA((HotreloadContext.LibFilename).c_str());
-	DeleteFileA((HotreloadContext.SymbolsFilename).c_str());
+	DeleteFileA((Win32HotreloadContext.LibFilename).c_str());
+	DeleteFileA((Win32HotreloadContext.SymbolsFilename).c_str());
 }
 
 void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
@@ -167,6 +179,7 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 	std::string candidateSymbolsFilePath = CLIENT_MODULE_SOURCE_PATH + candidateSymbolsFilename;
 
 	bool bCopyFailed = false;
+
 	// Copy .dll
 	if (!CopyFileA(candidateLibFilePath.c_str(), candidateLibFileName.c_str(), FALSE))
 	{
@@ -195,17 +208,17 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 	}
 
 	// Unload client module, which will either unload the base library if this is the first hotreload or unload and delete the previous hotreload iteration.
-	UnloadClientModule(API);
+	Win32_UnloadClientModule(API);
 
 	// If we were using a hotreloading iteration, delete it.
-	if (HotreloadContext.bIsHotreloaded)
+	if (Win32HotreloadContext.bIsHotreloaded)
 	{
-		CleanupHotreloadFiles();
+		Win32_CleanupHotreloadFiles();
 	}
 	
 
 	// Load client module with the new file names.
-	LoadClientModule(API, candidateName);
+	Win32_LoadClientModule(API, candidateName);
 
 	if (API.APISuccessfullyLoaded())
 	{
@@ -215,20 +228,19 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 		WIN32_FIND_DATAA fileFindData;
 		FindFirstFileA(candidateLibFileName.c_str(), &fileFindData);
 
-		HotreloadContext.LibFilename = candidateLibFileName;
-		HotreloadContext.LastLoadedClientLibraryFileWriteTime = fileFindData.ftLastWriteTime;
+		Win32HotreloadContext.LibFilename = candidateLibFileName;
+		Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime = fileFindData.ftLastWriteTime;
 
 		// Cache symbols file name.
-		HotreloadContext.SymbolsFilename = candidateSymbolsFilename;
-		HotreloadContext.bIsHotreloaded = true;
+		Win32HotreloadContext.SymbolsFilename = candidateSymbolsFilename;
+		Win32HotreloadContext.bIsHotreloaded = true;
 	}
 }
 
 void RunHotreloadCompileProgram()
 {
-#ifdef CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT
 	// Run Hotreload script if one is defined.
-
+#ifdef CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT
 	SHELLEXECUTEINFOA execInfo = {};
 	execInfo.cbSize = sizeof(SHELLEXECUTEINFO);
 	execInfo.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NO_CONSOLE;
@@ -236,7 +248,7 @@ void RunHotreloadCompileProgram()
 	execInfo.lpFile = CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT;
 	execInfo.lpParameters = "..\\";
 
-	if (ShellExecuteExA(&execInfo))
+	if (ShellExecuteExA(&execInfo) && execInfo.hProcess != 0)
 	{
 		std::cout << "Running Client Hotreload Recompile script...\n";
 		WaitForSingleObject(execInfo.hProcess, INFINITE);
@@ -245,7 +257,7 @@ void RunHotreloadCompileProgram()
 #endif
 }
 
-bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
+bool Win32_TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 {
 	// Look for a hotreload candidate file at the source path.
 	WIN32_FIND_DATAA sourceFileFindData;
@@ -255,12 +267,12 @@ bool TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 		return false;
 	}
 
-	uint64_t currentTime = *(uint64_t*)(&HotreloadContext.LastLoadedClientLibraryFileWriteTime);
+	uint64_t currentTime = *(uint64_t*)(&Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime);
 	uint64_t fileTime = *(uint64_t*)(&sourceFileFindData.ftLastWriteTime);
 
 	if (!bForce 
-		&& (!CompareFileTime(&HotreloadContext.LastLoadedClientLibraryFileWriteTime, &sourceFileFindData.ftLastWriteTime) 
-		|| HotreloadContext.LibFilename.compare(sourceFileFindData.cFileName) == 0))
+		&& (!CompareFileTime(&Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime, &sourceFileFindData.ftLastWriteTime) 
+		|| Win32HotreloadContext.LibFilename.compare(sourceFileFindData.cFileName) == 0))
 	{
 		return false;
 	}
