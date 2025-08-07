@@ -1,23 +1,14 @@
+SOURCE_INC_FILE()
+
 // Synergy Client Module & API Loading implementation. The symbols are referenced and used in Win32_Main.cpp.
 
+#include "SynergyClientAPI.h"
 #include "Platform/Win32_Platform.h"
-
-#include <SynergyClient.h>
 
 #include <iostream>
 #include <shellapi.h>
 
 #include <string>
-
-#ifndef TRANSLATION_UNIT
-static_assert(0, "INC File " __FILE__ " must be included within a translation unit and NOT compiled on its own !");
-#endif
-
-#ifndef WIN32_CLIENTLIBLOADER_INCLUDED
-#define WIN32_CLIENTLIBLOADER_INCLUDED
-#else
-static_assert(0, "INC File " __FILE__ " has been included twice !");
-#endif
 
 // Base name for the Client dynamic library file. The actual file will possibly have a suffix with its version and build time identification.
 #define CLIENT_MODULE_FILENAME_BASE "SynergyClientLib"
@@ -134,6 +125,7 @@ void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOver
 	if (APIStruct.APISuccessfullyLoaded())
 	{
 		std::cout << "Successfully loaded client library from '" << LibFilename << "'.\n";
+		APIStruct.Hello();
 	}
 }
 

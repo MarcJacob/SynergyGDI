@@ -1,17 +1,9 @@
+SOURCE_INC_FILE()
+
 // Symbol definitions for processing draw calls and generally drawing to the screen for the Win32 platform.
 
+#include "SynergyClientAPI.h"
 #include "Platform/Win32_Platform.h"
-#include "SynergyClientDrawing.h"
-
-#ifndef TRANSLATION_UNIT
-static_assert(0, "INC File " __FILE__ " must be included within a translation unit and NOT compiled on its own !");
-#endif
-
-#ifndef WIN32_DRAWING_INCLUDED
-#define WIN32_DRAWING_INCLUDED
-#else
-static_assert(0, "INC File " __FILE__ " has been included twice !");
-#endif
 
 bool Win32DrawCallBuffer::BeginWrite()
 {
@@ -19,7 +11,7 @@ bool Win32DrawCallBuffer::BeginWrite()
 		Reset Cursor position to 0 and zero out buffer memory.Output warning message if buffer is too small.
 		Output error if buffer is not valid.
 	*/
-
+	
 	if (Buffer == nullptr)
 	{
 		std::cerr << "ERROR: Attempted to make draw call buffer writeable without an actual buffer being provided !\n";

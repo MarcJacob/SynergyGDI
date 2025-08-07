@@ -1,11 +1,11 @@
-#include "SynergyClient.h"
-#include "SynergyClientDrawing.h"
+#define TRANSLATION_UNIT Win32_Main
 
+#include "SynergyClientAPI.h"
 #include "Platform/Win32_Platform.h"
 
 #include <vector>
 
-#define TRANSLATION_UNIT Win32_Main
+// Source includes
 #include "Platform/Win32_ClientLibLoader_INC.cpp"
 #include "Platform/Win32_Drawing_INC.cpp"
 
@@ -126,7 +126,6 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 		key = (ActionKey)((Keycode)-'A' + (uint8_t)(ActionKey::LETTERS_START));
 
 		// PLATFORM INTERACTION HOTKEYS
-		// TODO MOVE THIS TO AN EXTERNAL FUNCTION OR MAKE SOME SORT OF CALLBACK SYSTEM
 		if (key == ActionKey::KEY_R && !bRelease)
 		{
 			// Force a hot reload of the client module if hot reloading is supported.
@@ -147,7 +146,6 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 	{
 		key = (ActionKey)((Keycode) - VK_LEFT + (uint8_t)(ActionKey::ARROW_KEYS_START));
 	}
-	// TODO Handle all other action keys.
 
 	if (key == ActionKey::ACTION_KEY_NONE)
 	{
@@ -358,7 +356,6 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 	}
 	
 	// Initialize new viewport.
-	// TODO Recycle dead viewport IDs.
 	Win32App.Viewports.emplace_back();
 	Win32Viewport& newViewport = Win32App.Viewports.back();
 	newViewport = {};
@@ -577,8 +574,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			}
 		}
 
-		// TODO Process Inputs and other events triggered by the message loop.
-
 		// Reset frame data for next client frame.
 		{
 			// Increment Frame Counter
@@ -605,8 +600,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			inputBuffers[inputBackbufferIndex].EventCount = 0;
 			memset(inputBuffers[inputBackbufferIndex].Buffer, 0, inputBuffers[inputBackbufferIndex].MaxEventCount * sizeof(ActionInputEvent));
 			Win32App.InputBackbuffer = &inputBuffers[inputBackbufferIndex];
-
-			// TODO Update frame time ?
 		}
 
 		// Put the draw buffers in write mode.
