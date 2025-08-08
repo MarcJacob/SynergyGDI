@@ -65,8 +65,8 @@ struct Win32AppContext
 	std::vector<Win32Viewport> Viewports;
 
 	// Client context & frame data.
-	ClientContext ClientRunningContext;
-	ClientFrameData ClientFrameData;
+	ClientSessionData ClientRunningContext;
+	ClientFrameRequestData ClientFrameRequestData;
 
 	// Input buffer currently being filled in.
 	Win32ActionInputBuffer* InputBackbuffer;
@@ -448,19 +448,19 @@ DrawCall* AllocateNewDrawCall(ViewportID TargetViewportID, DrawCallType Type)
 void OnProgramEnd()
 {
 	// Deallocate client frame memory
-	if (Win32App.ClientFrameData.FrameMemory.Memory != nullptr)
+	if (Win32App.ClientFrameRequestData.FrameMemoryBuffer.Memory != nullptr)
 	{
-		free(Win32App.ClientFrameData.FrameMemory.Memory);
-		Win32App.ClientFrameData.FrameMemory.Memory = nullptr;
-		Win32App.ClientFrameData.FrameMemory.Size = 0;
+		free(Win32App.ClientFrameRequestData.FrameMemoryBuffer.Memory);
+		Win32App.ClientFrameRequestData.FrameMemoryBuffer.Memory = nullptr;
+		Win32App.ClientFrameRequestData.FrameMemoryBuffer.Size = 0;
 	}
 
 	// Deallocate client persistent memory
-	if (Win32App.ClientRunningContext.PersistentMemory.Memory != nullptr)
+	if (Win32App.ClientRunningContext.PersistentMemoryBuffer.Memory != nullptr)
 	{
-		free(Win32App.ClientRunningContext.PersistentMemory.Memory);
-		Win32App.ClientRunningContext.PersistentMemory.Memory = nullptr;
-		Win32App.ClientRunningContext.PersistentMemory.Size = 0;
+		free(Win32App.ClientRunningContext.PersistentMemoryBuffer.Memory);
+		Win32App.ClientRunningContext.PersistentMemoryBuffer.Memory = nullptr;
+		Win32App.ClientRunningContext.PersistentMemoryBuffer.Size = 0;
 	}
 
 	// If Client API was ever successfully loaded, unload it.
@@ -517,11 +517,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	}
 
 	// Initialize Client Context & Run Client Start, if the app initialized successfully.
-	ClientContext& clientRunningContext = Win32App.ClientRunningContext;
+	ClientSessionData& clientRunningContext = Win32App.ClientRunningContext;
 
 	// Start the client
-	clientRunningContext.PersistentMemory.Memory = (uint8_t*)(malloc(128000));
-	clientRunningContext.PersistentMemory.Size = 128000;
+	clientRunningContext.PersistentMemoryBuffer.Memory = (uint8_t*)(malloc(128000));
+	clientRunningContext.PersistentMemoryBuffer.Size = 128000;
 
 	clientRunningContext.Platform.AllocateViewport = AllocateViewport;
 	clientRunningContext.Platform.DestroyViewport = DestroyViewport;
@@ -530,10 +530,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 
 	// Frame data initialization
 
-	ClientFrameData& frameData = Win32App.ClientFrameData;
+	ClientFrameRequestData& frameData = Win32App.ClientFrameRequestData;
 	{
-		frameData.FrameMemory.Memory = (uint8_t*)(malloc(32000));
-		frameData.FrameMemory.Size = 32000;
+		frameData.FrameMemoryBuffer.Memory = (uint8_t*)(malloc(32000));
+		frameData.FrameMemoryBuffer.Size = 32000;
 		frameData.FrameNumber = 0;
 		frameData.FrameTime = CLIENT_FRAME_TIME;
 	
@@ -580,20 +580,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			frameData.FrameNumber++;
 			
 			// Reset frame memory
-			memset(frameData.FrameMemory.Memory, 0, frameData.FrameMemory.Size);
+			memset(frameData.FrameMemoryBuffer.Memory, 0, frameData.FrameMemoryBuffer.Size);
 
 			// Switch input buffers and assign the new frontbuffer to frame.
 			if (inputBackbufferIndex == 0)
 			{
 				inputBackbufferIndex = 1;
-				frameData.InputEvents.Buffer = inputBuffers[0].Buffer;
-				frameData.InputEvents.EventCount = inputBuffers[0].EventCount;
+				frameData.ActionInputEvents.Buffer = inputBuffers[0].Buffer;
+				frameData.ActionInputEvents.EventCount = inputBuffers[0].EventCount;
 			}
 			else
 			{
 				inputBackbufferIndex = 0;
-				frameData.InputEvents.Buffer = inputBuffers[1].Buffer;
-				frameData.InputEvents.EventCount = inputBuffers[1].EventCount;
+				frameData.ActionInputEvents.Buffer = inputBuffers[1].Buffer;
+				frameData.ActionInputEvents.EventCount = inputBuffers[1].EventCount;
 			}
 
 			// Reset new backbuffer and assign it to application context.

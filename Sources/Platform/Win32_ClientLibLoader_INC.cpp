@@ -140,9 +140,9 @@ void Win32_UnloadClientModule(SynergyClientAPI& API)
 	*/
 
 	API.Hello = []() {};
-	API.RunClientFrame = [](ClientContext& Context, ClientFrameData& FrameData) {};
-	API.StartClient = [](ClientContext& Context) {};
-	API.ShutdownClient = [](ClientContext& Context) {};
+	API.RunClientFrame = [](ClientSessionData& Context, ClientFrameRequestData& FrameData) {};
+	API.StartClient = [](ClientSessionData& Context) {};
+	API.ShutdownClient = [](ClientSessionData& Context) {};
 }
 
 #if HOTRELOAD_SUPPORTED
