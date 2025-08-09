@@ -86,12 +86,10 @@ void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOver
 		LibName = LibNameOverride;
 	}
 
-	std::string LibFilename = LibName + ".dll";
-
-	ClientLibModule = LoadLibraryA(LibFilename.c_str());
+	ClientLibModule = LoadLibraryA(LibName.c_str());
 	if (ClientLibModule == nullptr)
 	{
-		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << LibFilename << "\" exists in working directory.\n";
+		std::cerr << "Error: Couldn't load Client Library. Make sure \"" << LibName << "\" exists in working directory.\n";
 		return;
 	}
 
@@ -124,7 +122,7 @@ void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOver
 
 	if (APIStruct.APISuccessfullyLoaded())
 	{
-		std::cout << "Successfully loaded client library from '" << LibFilename << "'.\n";
+		std::cout << "Successfully loaded client library from '" << LibName << "'.\n";
 		APIStruct.Hello();
 	}
 }
@@ -167,29 +165,32 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 	std::string candidateLibFileName = candidateName + ".dll";
 	std::string candidateSymbolsFilename = candidateName + ".pdb";
 
-	std::string candidateLibFilePath = CLIENT_MODULE_SOURCE_PATH + candidateLibFileName;
-	std::string candidateSymbolsFilePath = CLIENT_MODULE_SOURCE_PATH + candidateSymbolsFilename;
+	std::string candidateLibFilePath = WIN32_TEMP_DATA_FOLDER + candidateLibFileName;
+	std::string candidateSymbolsFilePath = WIN32_TEMP_DATA_FOLDER + candidateSymbolsFilename;
+
+	std::string sourceLibFilePath = CLIENT_MODULE_SOURCE_PATH + candidateLibFileName;
+	std::string sourceSymbolsFilePath = CLIENT_MODULE_SOURCE_PATH + candidateSymbolsFilename;
 
 	bool bCopyFailed = false;
 
 	// Copy .dll
-	if (!CopyFileA(candidateLibFilePath.c_str(), candidateLibFileName.c_str(), FALSE))
+	if (!CopyFileA(sourceLibFilePath.c_str(), candidateLibFilePath.c_str(), FALSE))
 	{
 		if (GetLastError() != ERROR_SHARING_VIOLATION)
 		{
 			std::cerr << "ERROR: Failed to copy client module from Dependencies folder. Make sure the client library has been built.\n"
-				<< "Searched path = " << candidateLibFilePath << "\nError Code = " << GetLastError() << "\n";
+				<< "Searched path = " << sourceLibFilePath << "\nError Code = " << GetLastError() << "\n";
 		}
 		
 		bCopyFailed = true;
 	}
 	// Copy .pdb symbols.
-	else if (!CopyFileA(candidateSymbolsFilePath.c_str(), candidateSymbolsFilename.c_str(), FALSE))
+	else if (!CopyFileA(sourceSymbolsFilePath.c_str(), candidateSymbolsFilePath.c_str(), FALSE))
 	{
 		if (GetLastError() != ERROR_SHARING_VIOLATION)
 		{
 			std::cerr << "WARNING: Failed to find client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
-				<< "Searched path = " << candidateSymbolsFilePath << "\nError Code = " << GetLastError() << "\n";
+				<< "Searched path = " << sourceSymbolsFilePath << "\nError Code = " << GetLastError() << "\n";
 		}
 		bCopyFailed = true;
 	}
@@ -210,7 +211,7 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 	
 
 	// Load client module with the new file names.
-	Win32_LoadClientModule(API, candidateName);
+	Win32_LoadClientModule(API, candidateLibFilePath);
 
 	if (API.APISuccessfullyLoaded())
 	{
@@ -218,13 +219,13 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 		
 		// Cache the last write time of the file for automated change detection and filename.
 		WIN32_FIND_DATAA fileFindData;
-		FindFirstFileA(candidateLibFileName.c_str(), &fileFindData);
+		FindFirstFileA(candidateLibFilePath.c_str(), &fileFindData);
 
-		Win32HotreloadContext.LibFilename = candidateLibFileName;
+		Win32HotreloadContext.LibFilename = candidateLibFilePath;
 		Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime = fileFindData.ftLastWriteTime;
 
 		// Cache symbols file name.
-		Win32HotreloadContext.SymbolsFilename = candidateSymbolsFilename;
+		Win32HotreloadContext.SymbolsFilename = candidateSymbolsFilePath;
 		Win32HotreloadContext.bIsHotreloaded = true;
 	}
 }

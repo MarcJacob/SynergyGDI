@@ -498,6 +498,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
+	// If a Temp folder from a previous execution still exists, delete it.
+	if (DeleteFileA(WIN32_TEMP_DATA_FOLDER))
+	{
+		std::cout << "Removed previous iteration of Temp folder.\n";
+	}
+
+	// Create Temp folder which serves as a staging area for all files that are only relevant while the program runs.
+	if (CreateDirectoryA(WIN32_TEMP_DATA_FOLDER, NULL))
+	{
+		std::cout << "Created Temp folder at." << WIN32_TEMP_DATA_FOLDER << "\n";
+	}
+
 	Win32_LoadClientModule(Win32ClientAPI);
 
 #if HOTRELOAD_SUPPORTED

@@ -18,6 +18,8 @@
 #define CLIENT_FRAMES_PER_SECOND (60)
 #define CLIENT_FRAME_TIME (1.f / CLIENT_FRAMES_PER_SECOND)
 
+// Name of temporary folder where data only relevant to the current program execution is stored. Gets deleted and recreated by any subsequent launches.
+#define WIN32_TEMP_DATA_FOLDER ".\\Temp\\"
 
 // --------------------------------------
 
