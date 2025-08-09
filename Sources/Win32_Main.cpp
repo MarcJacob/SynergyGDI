@@ -627,6 +627,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			}
 		}
 
+		// Note cursor location & viewport ID as the frame is about to start.
+		frameData.CursorLocation = Win32App.CursorCoordinates;
+		frameData.CursorViewport = 0;
+
 		// Run Client Frame
 		Win32ClientAPI.RunClientFrame(clientRunningContext, frameData);
 
