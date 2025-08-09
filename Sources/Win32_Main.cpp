@@ -146,6 +146,24 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 	{
 		key = (ActionKey)((Keycode) - VK_LEFT + (uint8_t)(ActionKey::ARROW_KEYS_START));
 	}
+	// Mouse buttons
+	else if (Keycode >= VK_LBUTTON && Keycode <= VK_MBUTTON)
+	{
+		switch(Keycode)
+		{
+			case(VK_LBUTTON):
+				key = ActionKey::MOUSE_LEFT;
+				break;
+			case(VK_RBUTTON):
+				key = ActionKey::MOUSE_RIGHT;
+				break;
+			case(VK_MBUTTON):
+				key = ActionKey::MOUSE_MIDDLE;
+				break;
+			default:
+			break;
+		}
+	}
 
 	if (key == ActionKey::ACTION_KEY_NONE)
 	{
