@@ -15,6 +15,24 @@
 
 #define HOTRELOAD_SUPPORTED 1
 
+#if HOTRELOAD_SUPPORTED
+
+// NOTE(MJ) This whole hotreload system is a little garbage because it's so compiler-specific and goes around the entire build system,
+// but I just couldn't find a convenient way to have CMake do something that would work with hotreloading under the constraint that .pdb
+// files don't get unloaded when their associated library does...
+//
+// So for now let's consider hot reloading a very particular feature that has to be setup locally. As long as I'm working alone on this using
+// the MSVC compiler I'm fine, but the second this changes we'll need to move the entire hotreload system configuration to a file or something.
+
+// Script ran on each hot reload compile, triggering a simplified build pipeline on client code that has to output .dll and .pdb files
+// compatible with hotreloading (IE different name per iteration).
+#define CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT "..\\Scripts\\Win32Dev\\CompileClientForHotreload.bat"
+
+// Folder where new versions of the client library can be retrieved and hotreloaded as the program is running.
+#define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\"
+
+#endif // HOTRELOAD_SUPPORTED
+
 #define CLIENT_FRAMES_PER_SECOND (60)
 #define CLIENT_FRAME_TIME (1.f / CLIENT_FRAMES_PER_SECOND)
 
@@ -31,7 +49,10 @@ void Win32_LoadClientModule(SynergyClientAPI& APIStruct, std::string LibNameOver
 void Win32_UnloadClientModule(SynergyClientAPI& API);
 
 #if HOTRELOAD_SUPPORTED
-// Checks if a new Client library version is available for hotreload, and if there is, do it immediately. Returns whether hotreload was successful.
+/*
+	Checks if a new Client library version is available for hotreload, and if there is, do it immediately.Returns whether hotreload was successful.
+	Uses the CLIENT_MODULE_SOURCE_PATH folder to find a new lib file to load, and if successful, copies it and its symbols to the temp data folder.
+*/
 bool Win32_TryHotreloadClientModule(SynergyClientAPI& API, bool bForce = false);
 
 // Cleans up the current iteration of hot reloaded client module files from working directory.

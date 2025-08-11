@@ -507,6 +507,39 @@ void OnProgramEnd()
 	}
 }
 
+// Deletes a temporary file or folder within the Temp directory.
+void DeleteTempFile(const std::string& FileToDelete)
+{
+	WIN32_FIND_DATAA findData;
+	HANDLE file = FindFirstFileA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str(), &findData);
+
+	if (file == INVALID_HANDLE_VALUE)
+	{
+		return;
+	}
+
+	if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		// Delete every file inside this folder then delete the folder itself.
+		HANDLE folder = file;
+		while (FindNextFileA(file, &findData))
+		{
+			std::string deletedSubFilePath = (WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str();
+			deletedSubFilePath += '\\';
+			deletedSubFilePath += findData.cFileName;
+
+			DeleteTempFile(deletedSubFilePath);
+		}
+
+		RemoveDirectoryA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str());
+	}
+	else
+	{
+		// Delete the file.
+		DeleteFileA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str());
+	}
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	Win32App.ProgramInstance = hInstance;
@@ -516,11 +549,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	// If a Temp folder from a previous execution still exists, delete it.
-	if (DeleteFileA(WIN32_TEMP_DATA_FOLDER))
-	{
-		std::cout << "Removed previous iteration of Temp folder.\n";
-	}
+	// Clear all temporary data by clearing the temp folder itself.
+	DeleteTempFile(".\\");
 
 	// Create Temp folder which serves as a staging area for all files that are only relevant while the program runs.
 	if (CreateDirectoryA(WIN32_TEMP_DATA_FOLDER, NULL))
@@ -528,15 +558,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		std::cout << "Created Temp folder at." << WIN32_TEMP_DATA_FOLDER << "\n";
 	}
 
-	Win32_LoadClientModule(Win32ClientAPI);
-
+	// If HOT RELOAD is supported, then first try to use that instead of loading whatever is inside the executable directory itself.
 #if HOTRELOAD_SUPPORTED
+	Win32_TryHotreloadClientModule(Win32ClientAPI);
 	if (!Win32ClientAPI.APISuccessfullyLoaded())
 	{
-		// It is likely that API failed to load because no base library is available in working directory. If hot reload is supported,
-		// attempt one now. The hot reload system knows where to go look for new library versions.
-		Win32_TryHotreloadClientModule(Win32ClientAPI);
+		std::cerr << "Failed to load Client library from Client Source folder. Attempting to load client library from executable folder...\n";
+		Win32_LoadClientModule(Win32ClientAPI);
 	}
+#else
+	Win32_LoadClientModule(Win32ClientAPI);
 #endif
 
 	if (!AppContextInitSuccessful())
@@ -594,6 +625,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	Win32App.bRunning = true;
 	while (Win32App.bRunning)
 	{
+#if HOTRELOAD_SUPPORTED
+		Win32_TryHotreloadClientModule(Win32ClientAPI);
+#endif
+
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;

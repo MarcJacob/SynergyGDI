@@ -27,13 +27,6 @@ HMODULE ClientLibModule = NULL;
 // So for now let's consider hot reloading a very particular feature that has to be setup locally. As long as I'm working alone on this using
 // the MSVC compiler I'm fine, but the second this changes we'll need to move the entire hotreload system configuration to a file or something.
 
-// Script ran on each hot reload compile, triggering a simplified build pipeline on client code that has to output .dll and .pdb files
-// compatible with hotreloading (IE different name per iteration).
-#define CLIENT_MODULE_HOTRELOAD_COMPILE_SCRIPT "..\\Scripts\\Win32Dev\\CompileClientForHotreload.bat"
-
-// Folder where new versions of the client library can be retrieved and hotreloaded as the program is running.
-#define CLIENT_MODULE_SOURCE_PATH "Dependencies\\Synergy\\SynergyClientLib\\"
-
 /*
 	Iteration number of the client library and debug symbols being used. Gets increment on each hotreload that involves a successful copy of
 	the dll. When equal to 0, the base library is used and is NOT retrieved from the source path.
@@ -151,25 +144,43 @@ void Win32_CleanupHotreloadFiles()
 	DeleteFileA((Win32HotreloadContext.SymbolsFilename).c_str());
 }
 
-void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
+void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 {
 	std::cout << "Hotreloading Synergy Client Module.\n";
 
-	// Strip any file extension from candidate name.
-	size_t dotPos = candidateName.find(".", 0);
-	if (dotPos != std::string::npos)
+	// Retrieve file name from path.
+	int lastFolderSeparatorIndex = sourceLibFilePath.find_last_of('\\');
+
+	std::string sourceFileName;
+	std::string sourceFolder;
+	if (lastFolderSeparatorIndex != std::string::npos)
 	{
-		candidateName.erase(dotPos);
+		sourceFileName = sourceLibFilePath.substr(lastFolderSeparatorIndex + 1);
+		sourceFolder = sourceLibFilePath;
+		sourceFolder.erase(lastFolderSeparatorIndex + 1);
+	}
+	else
+	{
+		std::cerr << "Failed to hotreload client module from file '" << sourceLibFilePath << "' !\n";
+		return;
 	}
 
-	std::string candidateLibFileName = candidateName + ".dll";
-	std::string candidateSymbolsFilename = candidateName + ".pdb";
+	// Strip any file extension from candidate name.
+	size_t dotPos = sourceFileName.find(".", 0);
+	if (dotPos != std::string::npos)
+	{
+		sourceFileName.erase(dotPos);
+	}
+
+	// Determine "candidate" file names and paths which will be the targets of copying and loading.
+	std::string candidateLibFileName = sourceFileName + ".dll";
+	std::string candidateSymbolsFilename = sourceFileName + ".pdb";
 
 	std::string candidateLibFilePath = WIN32_TEMP_DATA_FOLDER + candidateLibFileName;
 	std::string candidateSymbolsFilePath = WIN32_TEMP_DATA_FOLDER + candidateSymbolsFilename;
 
-	std::string sourceLibFilePath = CLIENT_MODULE_SOURCE_PATH + candidateLibFileName;
-	std::string sourceSymbolsFilePath = CLIENT_MODULE_SOURCE_PATH + candidateSymbolsFilename;
+	// Assume that a .pdb file with the same file name as the source file will be found in the same folder.
+	std::string sourceSymbolsFilePath = sourceFolder + candidateSymbolsFilename;
 
 	bool bCopyFailed = false;
 
@@ -192,7 +203,7 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 			std::cerr << "WARNING: Failed to find client module debug symbols from Dependencies folder. Make sure the client library symbols have been produced.\n"
 				<< "Searched path = " << sourceSymbolsFilePath << "\nError Code = " << GetLastError() << "\n";
 		}
-		bCopyFailed = true;
+		// bCopyFailed = true; (Copying the symbols over successfully is not a critical necessity, uncomment this line if this changes).
 	}
 
 	if (bCopyFailed)
@@ -227,6 +238,11 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string candidateName)
 		// Cache symbols file name.
 		Win32HotreloadContext.SymbolsFilename = candidateSymbolsFilePath;
 		Win32HotreloadContext.bIsHotreloaded = true;
+	}
+	else
+	{
+		std::cout << "Synergy Client Module hotreload was unsuccessful. Unloading...\nProvide a new library file at the source folder or restart the app.\n";
+		Win32_UnloadClientModule(API);
 	}
 }
 
@@ -263,6 +279,7 @@ bool Win32_TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 	uint64_t currentTime = *(uint64_t*)(&Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime);
 	uint64_t fileTime = *(uint64_t*)(&sourceFileFindData.ftLastWriteTime);
 
+	// Check that the hotreload is forced or that the file found is more recent than the one currently loaded.
 	if (!bForce 
 		&& (!CompareFileTime(&Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime, &sourceFileFindData.ftLastWriteTime) 
 		|| Win32HotreloadContext.LibFilename.compare(sourceFileFindData.cFileName) == 0))
@@ -270,8 +287,20 @@ bool Win32_TryHotreloadClientModule(SynergyClientAPI& API, bool bForce)
 		return false;
 	}
 
+	std::string sourceFilePath = CLIENT_MODULE_SOURCE_PATH;
+	sourceFilePath += sourceFileFindData.cFileName;
+
+	// Check that it is possible to open the file.
+	HANDLE createTestHandle = CreateFileA(sourceFilePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, NULL, NULL);
+	if (createTestHandle == INVALID_HANDLE_VALUE)
+	{
+		// File is locked, probably already loaded by something else or still under construction.
+		return false;
+	}
+	CloseHandle(createTestHandle);
+
 	// We've found a candidate for hotreload !
-	HotreloadClientModule(API, sourceFileFindData.cFileName);
+	HotreloadClientModule(API, sourceFilePath);
 
 	return API.APISuccessfullyLoaded();
 }
