@@ -232,6 +232,64 @@ void DrawRectangle(RectangleDrawCallData& RectDrawCall, Win32PixelBuffer& PixelB
 	}
 }
 
+#pragma optimize("", off)
+void DrawEllipse(EllipseDrawCallData& EllipseDrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
+{
+	// Pre process circle calls into a ellipse call with Y = X.
+	if (EllipseDrawCall.ellipticRadii.y <= 0)
+	{
+		EllipseDrawCall.ellipticRadii.y = EllipseDrawCall.ellipticRadii.x;
+	}
+
+	Vector2s meridian = {};
+	Vector2s meridianPerp = {};
+	Vector2s meridianStart = {};
+	uint16_t meridianYProjectLength = 0;
+
+	// Find meridian and meridian perpendicular. The chosen meridian for drawing is the one with the longest projection along the Y axis.
+	// This is of course quite obvious to find when rotation isn't supported yet...
+	meridian =		{ 0, EllipseDrawCall.ellipticRadii.y };
+	meridianPerp =	{ EllipseDrawCall.ellipticRadii.x, 0 };
+	meridianStart =	EllipseDrawCall.origin - meridian / 2;
+	meridianYProjectLength = EllipseDrawCall.ellipticRadii.y;
+
+	// Draw strategy: We know that for each pixel on the chosen meridian projected on Y, two points correspond to it along the ellipse edge - "right" and "left".
+	// Taking those two halves as independent parts of the drawing process, we end up simply having to find out the point on each side with
+	// the formula destPoint = point +/- meridianPerp * (1 - cos(ANGLE)^2) / 2, with cos(ANGLE) being found from the travelled distance along the meridian.
+
+	uint16_t lastDrawnLine = 0;
+
+	for (uint16_t pointIndex = 0; pointIndex < meridianYProjectLength; pointIndex++)
+	{
+		float travelNormalized = (float)pointIndex / meridianYProjectLength;
+		Vector2s meridianPoint = meridianStart + (Vector2s)(meridian * travelNormalized);
+		meridianPoint.y = meridianStart.y + pointIndex;
+
+		float cosAtPoint = 1 - travelNormalized * 2;
+		float angleSin = sqrt(1 - cosAtPoint * cosAtPoint);
+
+		Vector2s rightPoint, leftPoint;
+		rightPoint = meridianPoint + meridianPerp * angleSin / 2;
+		leftPoint = meridianPoint - meridianPerp * angleSin / 2;
+
+		if (pointIndex > 0 && leftPoint.y > lastDrawnLine + 1)
+		{
+			std::cerr << "Whatafack\n";
+		}
+		lastDrawnLine = leftPoint.y;
+
+		// Draw line from left to right point.
+		for (uint16_t x = leftPoint.x; x < rightPoint.x; x++)
+		{
+			if (x < 0) continue;
+			if (x >= BufferWidth
+				|| leftPoint.y < 0 || leftPoint.y >= BufferHeight) break;
+
+			PixelBuffer[leftPoint.y * BufferWidth + x].full = EllipseDrawCall.color.full;
+		}
+	}
+}
+
 void Win32_ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
 	LineDrawCallData& line = (LineDrawCallData&)(Call);
@@ -246,6 +304,7 @@ void Win32_ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16
 		DrawRectangle(rect, PixelBuffer, BufferWidth, BufferHeight);
 		break;
 	case(DrawCallType::ELLIPSE):
+		DrawEllipse(ellipse, PixelBuffer, BufferWidth, BufferHeight);
 		break;
 	default:
 		std::cerr << "WARNING: Unsupported Client Draw Call type " << (uint16_t)(Call.type) << " ! Ignoring...\n";
