@@ -124,22 +124,6 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 	else if (Keycode >= 'A' && Keycode <= 'Z')
 	{
 		key = (ActionKey)((Keycode)-'A' + (uint8_t)(ActionKey::LETTERS_START));
-
-		// PLATFORM INTERACTION HOTKEYS
-		if (key == ActionKey::KEY_R && !bRelease)
-		{
-			// Force a hot reload of the client module if hot reloading is supported.
-#if HOTRELOAD_SUPPORTED
-			RunHotreloadCompileProgram();
-			Win32_TryHotreloadClientModule(Win32ClientAPI, true);
-#endif
-		}
-		else if (key == ActionKey::KEY_L && !bRelease)
-		{
-			// Log info about the current state of the platform.
-			std::cout << "WIN32 PLATFORM INFO:\n" <<
-				"\tMouse Coordinates: " << Win32App.CursorCoordinates.x << " | " << Win32App.CursorCoordinates.y << "\n";
-		}
 	}
 	// Arrow keys
 	else if (Keycode >= VK_LEFT && Keycode <= VK_DOWN)
@@ -164,11 +148,32 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 			break;
 		}
 	}
+	else if (Keycode >= VK_F1 && Keycode <= VK_F12)
+	{
+		key = (ActionKey)(Keycode - VK_F1 + (uint8_t)ActionKey::FUNCTION_KEYS_START);
+	}
 
 	if (key == ActionKey::ACTION_KEY_NONE)
 	{
 		// Unsupported input.
 		return;
+	}
+
+	// PLATFORM INTERACTION HOTKEYS
+	// First 6 function keys are reserved by the client.
+	if (key == ActionKey::KEY_FUNC7 && !bRelease)
+	{
+		// Force a hot reload of the client module if hot reloading is supported.
+#if HOTRELOAD_SUPPORTED
+		RunHotreloadCompileProgram();
+		Win32_TryHotreloadClientModule(Win32ClientAPI, true);
+#endif
+	}
+	else if (key == ActionKey::KEY_FUNC8 && !bRelease)
+	{
+		// Log info about the current state of the platform.
+		std::cout << "WIN32 PLATFORM INFO:\n" <<
+			"\tMouse Coordinates: " << Win32App.CursorCoordinates.x << " | " << Win32App.CursorCoordinates.y << "\n";
 	}
 
 	// Fill in other properties.
