@@ -149,7 +149,7 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 	std::cout << "Hotreloading Synergy Client Module.\n";
 
 	// Retrieve file name from path.
-	int lastFolderSeparatorIndex = sourceLibFilePath.find_last_of('\\');
+	size_t lastFolderSeparatorIndex = sourceLibFilePath.find_last_of('\\');
 
 	std::string sourceFileName;
 	std::string sourceFolder;
