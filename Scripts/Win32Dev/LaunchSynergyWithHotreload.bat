@@ -5,4 +5,5 @@
 set SETUP_PROGRAM="C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
 
 cd ..\..\Build\
-call %SETUP_PROGRAM% && Synergy.exe
+call %SETUP_PROGRAM%
+Synergy.exe
