@@ -19,27 +19,27 @@
 struct Win32Viewport
 {
 	// Unique identifier for this viewport, used by the client to reference it.
-	ViewportID ID;
+	ViewportID ID = VIEWPORT_ERROR_ID;
 
 	// Dimensions requested at creation. The client will assume this is the size of the viewport so the platform should leave it alone.
-	Vector2s Dimensions; 
+	Vector2s Dimensions = {};
 	
 	// Name used by viewport if real name can't be assigned or retrieved for any reason.
 	static constexpr WCHAR* ERROR_NAME = L"VIEWPORT_NAME_ERROR"; 
 	
 	// Display name of the viewport.
-	WCHAR* Name; 
+	WCHAR* Name = ERROR_NAME; 
 
 	// Window & Bitmap data
-	HWND Win32WindowHandle;
-	HDC Win32WindowDC;
-	HBITMAP DrawingBitmap;
-	HDC DrawingBitmapDC;
+	HWND Win32WindowHandle = NULL;
+	HDC Win32WindowDC = NULL;
+	HBITMAP DrawingBitmap = NULL;
+	HDC DrawingBitmapDC = NULL;
 
 	// Render Pixel data
-	Win32PixelRGBA* PixelBuffer;
-	uint16_t PixelBufferWidth;
-	uint16_t PixelBufferHeight;
+	Win32PixelRGBA* PixelBuffer = nullptr;
+	uint16_t PixelBufferWidth = 0;
+	uint16_t PixelBufferHeight = 0;
 
 	// Draw Call buffer, filled in via client requests.
 	Win32DrawCallBuffer ClientDrawCallBuffer;
@@ -57,7 +57,7 @@ struct Win32ActionInputBuffer
 struct Win32AppContext
 {
 	// Win32 Program Process instance.
-	HINSTANCE ProgramInstance;
+	HINSTANCE ProgramInstance = NULL;
 
 	// Whether the app is actively running client frames.
 	bool bRunning = false;
@@ -66,17 +66,20 @@ struct Win32AppContext
 	std::vector<Win32Viewport> Viewports;
 
 	// Client context & frame data.
-	ClientSessionData ClientRunningContext;
-	ClientFrameRequestData ClientFrameRequestData;
+	ClientSessionData ClientRunningContext = {};
+	ClientFrameRequestData ClientFrameRequestData = {};
 
 	// Input buffer currently being filled in.
-	Win32ActionInputBuffer* InputBackbuffer;
+	Win32ActionInputBuffer* InputBackbuffer = nullptr;
+
+	// Input buffer currently in use by frame or about to be used by next frame.
+	Win32ActionInputBuffer* InputFrontbuffer = nullptr;
 
 	// Latent input state, used to add extra data to input events.
-	Vector2s CursorCoordinates;
-	bool bCtrlPressed;
-	bool bShiftPressed;
-	bool bAltPressed;
+	Vector2s CursorCoordinates = {};
+	bool bCtrlPressed = false;
+	bool bShiftPressed = false;
+	bool bAltPressed = false;
 };
 
 // Main Win32 Static Application Context.
@@ -108,9 +111,9 @@ Win32Viewport* FindViewportFromWindowHandle(HWND windowHandle)
 /* Builds and records an action input for the given keyboard key code and viewport, putting it in whatever buffer(s) are appropriate. */
 void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, bool bRelease)
 {
-	// Check that there is a backbuffer ready.
+	// Check that there is a backbuffer ready and that it is not full.
 	if (Win32App.InputBackbuffer == nullptr
-		&& Win32App.InputBackbuffer->EventCount >= Win32App.InputBackbuffer->MaxEventCount)
+		|| Win32App.InputBackbuffer->EventCount >= Win32App.InputBackbuffer->MaxEventCount)
 	{
 		return;
 	}
@@ -568,7 +571,74 @@ void OnProgramEnd()
 	}
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
+/*
+	Returns a valid Client Session Data structure which can be used to start and run a Client with.
+*/
+ClientSessionData InitializeClientSessionData(size_t PersistentMemorySize)
+{
+	ClientSessionData sessionData = {};
+	sessionData.PersistentMemoryBuffer.Memory = (uint8_t*)(malloc(PersistentMemorySize));
+	sessionData.PersistentMemoryBuffer.Size = PersistentMemorySize;
+
+	sessionData.Platform.AllocateViewport = AllocateViewport;
+	sessionData.Platform.DestroyViewport = DestroyViewport;
+	
+	return sessionData;
+}
+
+/*
+	Returns a valid Frame Request Data structure which can be used to run a Client frame with.
+*/
+ClientFrameRequestData InitializeFrameRequestData(size_t FrameNumber, size_t FrameMemorySize)
+{
+	ClientFrameRequestData frameData = {};
+
+	frameData.FrameMemoryBuffer.Memory = (uint8_t*)(malloc(FrameMemorySize));
+	frameData.FrameMemoryBuffer.Size = FrameMemorySize;
+	frameData.FrameNumber = FrameNumber;
+	frameData.FrameTime = CLIENT_FRAME_TIME;
+
+	if (frameData.FrameMemoryBuffer.Memory == nullptr)
+	{
+		std::cerr << "FATAL ERROR: Failed to allocate memory for Frame Memory !\n";
+		return {};
+	}
+
+	memset(frameData.FrameMemoryBuffer.Memory, 0, FrameMemorySize);
+
+	// Assign Frame System Calls
+	frameData.NewDrawCall = [](ViewportID TargetViewportID, DrawCallType Type)
+		{
+			// Simply redirect the call directly to whichever draw buffer is assigned to the target viewport.
+			return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
+		};
+
+	// Note cursor location & viewport ID as the frame is about to start.
+	frameData.CursorLocation = Win32App.CursorCoordinates;
+	frameData.CursorViewport = 0;
+
+	// Assign input buffer.
+	frameData.ActionInputEvents.Buffer = Win32App.InputFrontbuffer->Buffer;
+	frameData.ActionInputEvents.EventCount = Win32App.InputFrontbuffer->EventCount;
+
+	return frameData;
+}
+
+/*
+	Frees up the resources taken by a Frame Request Data structure.
+*/
+void FreeFrameRequestData(ClientFrameRequestData& FrameData)
+{
+	// Free frame memory and perform a full reset of its properties.
+	free(FrameData.FrameMemoryBuffer.Memory);
+
+	FrameData = {};
+}
+
+int WINAPI WinMain(_In_ HINSTANCE hInstance,
+	_In_opt_ HINSTANCE hPrevInstance,
+	_In_ LPSTR lpCmdLine,
+	_In_ int nShowCmd)
 {
 	Win32App.ProgramInstance = hInstance;
 
@@ -600,33 +670,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	}
 
 	// Initialize Client Context & Run Client Start, if the app initialized successfully.
-	ClientSessionData& clientRunningContext = Win32App.ClientRunningContext;
+	Win32App.ClientRunningContext = InitializeClientSessionData(1024 * 68); // 68kB Persistent memory
 
 	// Start the client
-	clientRunningContext.PersistentMemoryBuffer.Memory = (uint8_t*)(malloc(128000));
-	clientRunningContext.PersistentMemoryBuffer.Size = 128000;
-
-	clientRunningContext.Platform.AllocateViewport = AllocateViewport;
-	clientRunningContext.Platform.DestroyViewport = DestroyViewport;
-
-	Win32ClientAPI.StartClient(clientRunningContext);
-
-	// Frame data initialization
-
-	ClientFrameRequestData& frameData = Win32App.ClientFrameRequestData;
-	{
-		frameData.FrameMemoryBuffer.Memory = (uint8_t*)(malloc(32000));
-		frameData.FrameMemoryBuffer.Size = 32000;
-		frameData.FrameNumber = 0;
-		frameData.FrameTime = CLIENT_FRAME_TIME;
-	
-		// Assign Frame System Calls
-		frameData.NewDrawCall = [](ViewportID TargetViewportID, DrawCallType Type)
-			{
-				// Simply redirect the call directly to whichever draw buffer is assigned to the target viewport.
-				return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
-			};
-	}
+	Win32ClientAPI.StartClient(Win32App.ClientRunningContext);
 
 	// Input buffers
 	Win32ActionInputBuffer inputBuffers[2];
@@ -640,12 +687,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 	inputBuffers[1].EventCount = 0;
 	inputBuffers[1].MaxEventCount = 64;
 
-	// Set first backbuffer to index 0
-	int inputBackbufferIndex = 0;
-	Win32App.InputBackbuffer = &inputBuffers[inputBackbufferIndex];
+	// Set first backbuffer to index 0. It will be the first to be filled in with input events and used for the first client frame.
+	Win32App.InputBackbuffer = &inputBuffers[0];
+	Win32App.InputFrontbuffer = &inputBuffers[1];
 
-	// Message processing & Drawing loop.
-	MSG message;
+	// Frame & Time tracking
+	size_t frameCounter = 0;
 
 	// Let the party begin
 	Win32App.bRunning = true;
@@ -658,6 +705,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
 		{
 			if (!ViewportIsValid(viewportID)) continue;
+			
+			// Message processing & Drawing loop.
+			MSG message;
 			while (PeekMessage(&message, Win32App.Viewports[viewportID].Win32WindowHandle, NULL, NULL, PM_REMOVE))
 			{
 				TranslateMessage(&message);
@@ -665,33 +715,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			}
 		}
 
-		// Reset frame data for next client frame.
-		{
-			// Increment Frame Counter
-			frameData.FrameNumber++;
-			
-			// Reset frame memory
-			memset(frameData.FrameMemoryBuffer.Memory, 0, frameData.FrameMemoryBuffer.Size);
+		// Switch input buffers so backbuffer that was just filled in with messages will become front buffer and be used by the frame.
+		Win32ActionInputBuffer* swapTemp = Win32App.InputBackbuffer;
+		Win32App.InputBackbuffer = Win32App.InputFrontbuffer;
+		Win32App.InputFrontbuffer = swapTemp;
 
-			// Switch input buffers and assign the new frontbuffer to frame.
-			if (inputBackbufferIndex == 0)
-			{
-				inputBackbufferIndex = 1;
-				frameData.ActionInputEvents.Buffer = inputBuffers[0].Buffer;
-				frameData.ActionInputEvents.EventCount = inputBuffers[0].EventCount;
-			}
-			else
-			{
-				inputBackbufferIndex = 0;
-				frameData.ActionInputEvents.Buffer = inputBuffers[1].Buffer;
-				frameData.ActionInputEvents.EventCount = inputBuffers[1].EventCount;
-			}
-
-			// Reset new backbuffer and assign it to application context.
-			inputBuffers[inputBackbufferIndex].EventCount = 0;
-			memset(inputBuffers[inputBackbufferIndex].Buffer, 0, inputBuffers[inputBackbufferIndex].MaxEventCount * sizeof(ActionInputEvent));
-			Win32App.InputBackbuffer = &inputBuffers[inputBackbufferIndex];
-		}
+		// Reset new backbuffer and assign it to application context.
+		Win32App.InputBackbuffer->EventCount = 0;
+		memset(Win32App.InputBackbuffer->Buffer, 0, Win32App.InputBackbuffer->MaxEventCount * sizeof(ActionInputEvent));
+		
+		// Prepare frame data for next client frame.
+		Win32App.ClientFrameRequestData = InitializeFrameRequestData(frameCounter, 1024 * 16); // 16kB frame memory
 
 		// Put the draw buffers in write mode.
 		for (ViewportID viewportID = 0; viewportID < Win32App.Viewports.size(); viewportID++)
@@ -701,17 +735,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			{
 				// If the buffer can't be written into for any reason, unlink Draw Call function.
 				// This will effectively disable drawing for this frame.
-				std::cerr << "ERROR: Could not set draw buffer to write mode for frame " << frameData.FrameNumber << "\n";
-				frameData.NewDrawCall = nullptr;
+				std::cerr << "ERROR: Could not set draw buffer to write mode for frame " << Win32App.ClientFrameRequestData.FrameNumber << "\n";
+				Win32App.ClientFrameRequestData.NewDrawCall = nullptr;
 			}
 		}
 
-		// Note cursor location & viewport ID as the frame is about to start.
-		frameData.CursorLocation = Win32App.CursorCoordinates;
-		frameData.CursorViewport = 0;
-
 		// Run Client Frame
-		Win32ClientAPI.RunClientFrame(clientRunningContext, frameData);
+		Win32ClientAPI.RunClientFrame(Win32App.ClientRunningContext, Win32App.ClientFrameRequestData);
 
 		// Drawing pass - rasterize all incoming draw calls after clearing the screen to black.
 
@@ -726,7 +756,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			
 			if (!viewport.ClientDrawCallBuffer.BeginRead())
 			{
-				std::cerr << "ERROR: Invalid client draw call buffer for frame " << frameData.FrameNumber << " skipping drawing stage.\n";
+				std::cerr << "ERROR: Invalid client draw call buffer for frame " << Win32App.ClientFrameRequestData.FrameNumber << " skipping drawing stage.\n";
 				continue;
 			}
 
@@ -745,6 +775,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 			
 			BitBlt(viewport.Win32WindowDC, 0, 0, viewport.PixelBufferWidth, viewport.PixelBufferHeight, viewport.DrawingBitmapDC, 0, 0, SRCCOPY);
 		}
+
+		// Free resources taken by Client frame.
+		FreeFrameRequestData(Win32App.ClientFrameRequestData);
 	}
 
 	OnProgramEnd();

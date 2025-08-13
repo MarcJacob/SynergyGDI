@@ -52,7 +52,7 @@ void Win32_DeleteTempFile(const std::string& FilePath)
 			Win32_DeleteTempFile(deletedSubFilePath);
 
 			// Set the Find Data back to search pattern for the folder.
-			strcpy(findData.cFileName, subFolderFilePattern.c_str());
+			strcpy_s(findData.cFileName, sizeof(findData.cFileName), subFolderFilePattern.c_str());
 
 		} while (FindNextFileA(file, &findData));
 		RemoveDirectoryA(relativePath.c_str());
