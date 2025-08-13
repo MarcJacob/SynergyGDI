@@ -232,7 +232,6 @@ void DrawRectangle(RectangleDrawCallData& RectDrawCall, Win32PixelBuffer& PixelB
 	}
 }
 
-#pragma optimize("", off)
 void DrawEllipse(EllipseDrawCallData& EllipseDrawCall, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
 	// Pre process circle calls into a ellipse call with Y = X.
@@ -292,6 +291,13 @@ void DrawEllipse(EllipseDrawCallData& EllipseDrawCall, Win32PixelBuffer& PixelBu
 
 void Win32_ProcessDrawCall(DrawCall& Call, Win32PixelBuffer& PixelBuffer, uint16_t BufferWidth, uint16_t BufferHeight)
 {
+	// Pre process draw call, changing its color format to be little-endian-friendly (otherwise Red and Blue will be inverted).
+	// This is necessary because color is written directly using the 32 bits member of the union, triggering an accidental
+	// "little endian encoding" of the color into the bitmap.
+	uint8_t swapTemp = Call.color.b;
+	Call.color.b = Call.color.r;
+	Call.color.r = swapTemp;
+
 	LineDrawCallData& line = (LineDrawCallData&)(Call);
 	RectangleDrawCallData& rect = (RectangleDrawCallData&)(Call);
 	EllipseDrawCallData& ellipse = (EllipseDrawCallData&)(Call);
