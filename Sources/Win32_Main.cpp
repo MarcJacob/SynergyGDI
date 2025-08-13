@@ -71,7 +71,11 @@ struct Win32AppContext
 	// Input buffer currently being filled in.
 	Win32ActionInputBuffer* InputBackbuffer;
 
+	// Latent input state, used to add extra data to input events.
 	Vector2s CursorCoordinates;
+	bool bCtrlPressed;
+	bool bShiftPressed;
+	bool bAltPressed;
 };
 
 // Main Win32 Static Application Context.
@@ -148,9 +152,14 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 			break;
 		}
 	}
+	// Function keys
 	else if (Keycode >= VK_F1 && Keycode <= VK_F12)
 	{
 		key = (ActionKey)(Keycode - VK_F1 + (uint8_t)ActionKey::FUNCTION_KEYS_START);
+	}
+	else if (Keycode == VK_SPACE)
+	{
+		key = ActionKey::KEY_SPACE;
 	}
 
 	if (key == ActionKey::ACTION_KEY_NONE)
@@ -175,6 +184,11 @@ void RecordActionInputForViewport(Win32Viewport& viewport, uint64_t Keycode, boo
 		std::cout << "WIN32 PLATFORM INFO:\n" <<
 			"\tMouse Coordinates: " << Win32App.CursorCoordinates.x << " | " << Win32App.CursorCoordinates.y << "\n";
 	}
+
+	// Determine modifier key states for this input.
+	event.modifiers.modifiersBitmask |= Win32App.bCtrlPressed << 0;
+	event.modifiers.modifiersBitmask |= Win32App.bShiftPressed << 1;
+	event.modifiers.modifiersBitmask |= Win32App.bAltPressed << 2;
 
 	// Fill in other properties.
 	event.key = key;
@@ -302,13 +316,41 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT messageType, WPARAM wParam, LP
 	case(WM_KEYDOWN):
 		if (viewport != nullptr)
 		{
-			RecordActionInputForViewport(*viewport, wParam, false);			
+			// Modifier keys are handled separately. 
+			if (wParam == VK_CONTROL)
+			{
+				Win32App.bCtrlPressed = true;
+			}
+			else if (wParam == VK_SHIFT)
+			{
+				Win32App.bShiftPressed = true;
+			}
+			// Alt is handled in a different message.
+			// All other keys go through the normal action input processing.
+			else
+			{
+				RecordActionInputForViewport(*viewport, wParam, false);
+			}
 		}
 		break;
 	case(WM_KEYUP):
 		if (viewport != nullptr)
 		{
-			RecordActionInputForViewport(*viewport, wParam, true);			
+			// Modifier keys are handled separately. 
+			if (wParam == VK_CONTROL)
+			{
+				Win32App.bCtrlPressed = false;
+			}
+			else if (wParam == VK_SHIFT)
+			{
+				Win32App.bShiftPressed = false;
+			}
+			// Alt is handled in a different message.
+			// All other keys go through the normal action input processing.
+			else
+			{
+				RecordActionInputForViewport(*viewport, wParam, true);
+			}
 		}
 		break;
 	default:
