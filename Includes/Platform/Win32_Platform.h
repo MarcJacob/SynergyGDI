@@ -36,9 +36,6 @@
 #define CLIENT_FRAMES_PER_SECOND (60)
 #define CLIENT_FRAME_TIME (1.f / CLIENT_FRAMES_PER_SECOND)
 
-// Name of temporary folder where data only relevant to the current program execution is stored. Gets deleted and recreated by any subsequent launches.
-#define WIN32_TEMP_DATA_FOLDER "Temp\\"
-
 // --------------------------------------
 
 // CLIENT LOADING & API
@@ -61,7 +58,7 @@ void Win32_CleanupHotreloadFiles();
 
 // -----------------------------
 
-// PLATFORM DRAWING
+// DRAWING
 
 struct DrawCall;
 enum class DrawCallType;
@@ -125,5 +122,32 @@ struct Win32DrawCallBuffer
 	// When filling the buffer in, is the write cursor. When reading the buffer, is the read cursor.
 	size_t CursorPosition = 0;
 };
+
+// FILE MANAGEMENT
+
+/*
+	Creates a copy of any file passed as SOURCE into the Temp Data folder at the provided relative destination path.
+	SourcePath is absolute or relative to current working directory.
+	DestPath is relative to Temp Data folder.
+
+	Returns whether the copy was successful.
+*/
+bool Win32_CreateTempCopyFile(const std::string& SourcePath, const std::string& DestPath);
+
+/*
+	Deletes a file from the Temp Data folder with the given relative path.
+	FilePath is relative to Temp Data folder.
+*/
+void Win32_DeleteTempFile(const std::string& FilePath);
+
+/*
+	Deletes the entirety of the Temp Data folder and recreates it. Done at platform initialization.
+*/
+void Win32_ResetTempDataFolder();
+
+/*
+	Converts a passed in Temp Data Folder Relative path into a path relative to the current working directory.
+*/
+std::string Win32_ConvertTempPathToRelativePath(const std::string& TempPath);
 
 #endif // WIN32_PLATFORM_INCLUDED

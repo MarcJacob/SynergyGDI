@@ -174,18 +174,15 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 
 	// Determine "candidate" file names and paths which will be the targets of copying and loading.
 	std::string candidateLibFileName = sourceFileName + ".dll";
-	std::string candidateSymbolsFilename = sourceFileName + ".pdb";
-
-	std::string candidateLibFilePath = WIN32_TEMP_DATA_FOLDER + candidateLibFileName;
-	std::string candidateSymbolsFilePath = WIN32_TEMP_DATA_FOLDER + candidateSymbolsFilename;
+	std::string candidateSymbolsFileName = sourceFileName + ".pdb";
 
 	// Assume that a .pdb file with the same file name as the source file will be found in the same folder.
-	std::string sourceSymbolsFilePath = sourceFolder + candidateSymbolsFilename;
+	std::string sourceSymbolsFilePath = sourceFolder + candidateSymbolsFileName;
 
 	bool bCopyFailed = false;
 
 	// Copy .dll
-	if (!CopyFileA(sourceLibFilePath.c_str(), candidateLibFilePath.c_str(), FALSE))
+	if (!Win32_CreateTempCopyFile(sourceLibFilePath, candidateLibFileName))
 	{
 		if (GetLastError() != ERROR_SHARING_VIOLATION)
 		{
@@ -196,7 +193,7 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 		bCopyFailed = true;
 	}
 	// Copy .pdb symbols.
-	else if (!CopyFileA(sourceSymbolsFilePath.c_str(), candidateSymbolsFilePath.c_str(), FALSE))
+	else if (!Win32_CreateTempCopyFile(sourceSymbolsFilePath, candidateSymbolsFileName))
 	{
 		if (GetLastError() != ERROR_SHARING_VIOLATION)
 		{
@@ -222,7 +219,9 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 	
 
 	// Load client module with the new file names.
-	Win32_LoadClientModule(API, candidateLibFilePath);
+	std::string loadedLibPath = Win32_ConvertTempPathToRelativePath(candidateLibFileName);
+	std::string loadedSymbolsPath = Win32_ConvertTempPathToRelativePath(candidateSymbolsFileName);
+	Win32_LoadClientModule(API, loadedLibPath);
 
 	if (API.APISuccessfullyLoaded())
 	{
@@ -230,13 +229,13 @@ void HotreloadClientModule(SynergyClientAPI& API, std::string sourceLibFilePath)
 		
 		// Cache the last write time of the file for automated change detection and filename.
 		WIN32_FIND_DATAA fileFindData;
-		FindFirstFileA(candidateLibFilePath.c_str(), &fileFindData);
+		FindFirstFileA(loadedLibPath.c_str(), &fileFindData);
 
-		Win32HotreloadContext.LibFilename = candidateLibFilePath;
+		Win32HotreloadContext.LibFilename = loadedLibPath;
 		Win32HotreloadContext.LastLoadedClientLibraryFileWriteTime = fileFindData.ftLastWriteTime;
 
 		// Cache symbols file name.
-		Win32HotreloadContext.SymbolsFilename = candidateSymbolsFilePath;
+		Win32HotreloadContext.SymbolsFilename = loadedSymbolsPath;
 		Win32HotreloadContext.bIsHotreloaded = true;
 	}
 	else

@@ -8,6 +8,7 @@
 // Source includes
 #include "Platform/Win32_ClientLibLoader_INC.cpp"
 #include "Platform/Win32_Drawing_INC.cpp"
+#include "Platform/Win32_FileManagement_INC.cpp"
 
 /* 
 	Viewport structure for the Win32 Platform, created by request of the Client.
@@ -420,11 +421,30 @@ ViewportID AllocateViewport(const char* Name, Vector2s Dimensions)
 		MAIN_WINDOW_CLASS_REGISTERED = true;
 	}
 	
-	// Initialize new viewport.
-	Win32App.Viewports.emplace_back();
-	Win32Viewport& newViewport = Win32App.Viewports.back();
+	// Find ID for viewport, allocate a new slot if necessary.
+	ViewportID newViewportID;
+	{
+		// Find an empty spot in the Viewports array or create a new one if none are available.
+		
+		for (newViewportID = 0; newViewportID < Win32App.Viewports.size(); newViewportID++)
+		{
+			if (!ViewportIsValid(newViewportID))
+			{
+				break; // Take empty spot
+			}
+		}
+
+		if (newViewportID == Win32App.Viewports.size())
+		{
+			// Failed to find available spot. Allocate new viewport slot. The ID should already correspond.
+			Win32App.Viewports.emplace_back();
+		}
+	}
+
+	Win32Viewport& newViewport = Win32App.Viewports[newViewportID];
 	newViewport = {};
-	newViewport.ID = (ViewportID)(Win32App.Viewports.size()) - 1;
+	newViewport.ID = newViewportID;
+
 	newViewport.Dimensions = Dimensions;
 
 	// Convert provided ANSI viewport name to UNICODE.
@@ -499,12 +519,6 @@ bool AppContextInitSuccessful()
 	return Win32ClientAPI.APISuccessfullyLoaded();
 }
 
-// Redirector function that uses the current frame draw buffer in the platform context.
-DrawCall* AllocateNewDrawCall(ViewportID TargetViewportID, DrawCallType Type)
-{
-	return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
-}
-
 /*
 	Final program cleanup code ran when the program ends for ANY reason.
 	When Force Shutdown is true, a lot of "heavy" or thread-sensitive cleanup operations will be skipped, the priority being to free
@@ -554,39 +568,6 @@ void OnProgramEnd()
 	}
 }
 
-// Deletes a temporary file or folder within the Temp directory.
-void DeleteTempFile(const std::string& FileToDelete)
-{
-	WIN32_FIND_DATAA findData;
-	HANDLE file = FindFirstFileA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str(), &findData);
-
-	if (file == INVALID_HANDLE_VALUE)
-	{
-		return;
-	}
-
-	if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-	{
-		// Delete every file inside this folder then delete the folder itself.
-		HANDLE folder = file;
-		while (FindNextFileA(file, &findData))
-		{
-			std::string deletedSubFilePath = (WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str();
-			deletedSubFilePath += '\\';
-			deletedSubFilePath += findData.cFileName;
-
-			DeleteTempFile(deletedSubFilePath);
-		}
-
-		RemoveDirectoryA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str());
-	}
-	else
-	{
-		// Delete the file.
-		DeleteFileA((WIN32_TEMP_DATA_FOLDER + FileToDelete).c_str());
-	}
-}
-
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int nCmdShow)
 {
 	Win32App.ProgramInstance = hInstance;
@@ -596,14 +577,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		CreateConsole();
 	}
 
-	// Clear all temporary data by clearing the temp folder itself.
-	DeleteTempFile(".\\");
-
-	// Create Temp folder which serves as a staging area for all files that are only relevant while the program runs.
-	if (CreateDirectoryA(WIN32_TEMP_DATA_FOLDER, NULL))
-	{
-		std::cout << "Created Temp folder at." << WIN32_TEMP_DATA_FOLDER << "\n";
-	}
+	// Reset Temp folder which serves as a staging area for all files that are only relevant while the program runs.
+	Win32_ResetTempDataFolder();
 
 	// If HOT RELOAD is supported, then first try to use that instead of loading whatever is inside the executable directory itself.
 #if HOTRELOAD_SUPPORTED
@@ -646,7 +621,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevious, LPSTR pCmdLine, int
 		frameData.FrameTime = CLIENT_FRAME_TIME;
 	
 		// Assign Frame System Calls
-		frameData.NewDrawCall = AllocateNewDrawCall;
+		frameData.NewDrawCall = [](ViewportID TargetViewportID, DrawCallType Type)
+			{
+				// Simply redirect the call directly to whichever draw buffer is assigned to the target viewport.
+				return Win32App.Viewports[TargetViewportID].ClientDrawCallBuffer.NewDrawCall(Type);
+			};
 	}
 
 	// Input buffers
